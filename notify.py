@@ -81,6 +81,12 @@ class DeliveryError(RuntimeError):
     """A channel rejected or could not accept the message."""
 
 
+def _tls_context() -> ssl.SSLContext:
+    context = ssl.create_default_context()
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    return context
+
+
 def _truncate(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
@@ -279,13 +285,13 @@ def send_email(channels: Channels, text: str, color: str) -> None:
                 channels.smtp_host,
                 channels.smtp_port,
                 timeout=20,
-                context=ssl.create_default_context(),
+                context=_tls_context(),
             )
         else:
             client = smtplib.SMTP(channels.smtp_host, channels.smtp_port, timeout=20)
             client.ehlo()
             if security == "starttls":
-                client.starttls(context=ssl.create_default_context())
+                client.starttls(context=_tls_context())
                 client.ehlo()
         if channels.smtp_user:
             client.login(channels.smtp_user, channels.smtp_password)

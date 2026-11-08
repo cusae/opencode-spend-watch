@@ -1,4 +1,5 @@
 import json
+import ssl
 import unittest
 import urllib.error
 from unittest import mock
@@ -131,6 +132,8 @@ class EmailTests(unittest.TestCase):
         with mock.patch.object(notify.smtplib, "SMTP", return_value=client):
             notify.send_email(self.channels(), "**hello**", "#2e7d32")
         client.starttls.assert_called_once()
+        context = client.starttls.call_args.kwargs["context"]
+        self.assertGreaterEqual(context.minimum_version, ssl.TLSVersion.TLSv1_2)
         client.login.assert_called_once_with("user", "secret")
         message = client.send_message.call_args.args[0]
         self.assertEqual(message["Subject"], "OpenCode spend alert")
