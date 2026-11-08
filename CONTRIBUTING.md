@@ -44,13 +44,16 @@ warning.
 - Keep the module dependency-free at runtime; development tools belong in
   `requirements-dev.txt`.
 - Follow `ruff format`. The lint rules are in `pyproject.toml`.
-- Type annotations are mandatory: `mypy --strict watch.py` must pass.
+- Type annotations are mandatory: `mypy --strict watch.py notify.py` must pass.
 - Tests live in `test/python/` and must not touch the network. Monkeypatch
   `collect`, `fetch_*`, and `post_webhook`.
 - Shell behaviour lives in `install.sh` and `.githooks/commit-msg`; cover it in
   `test/shell/*.bats`.
-- Never log, print, or send the OpenCode key. Never commit a webhook URL, an
-  org ID, a state file, or `config.env`.
+- Channel payloads live in `notify.py`; tests mock the transport, never the
+  network.
+- Never log, print, or send the OpenCode key, a webhook URL, an SMTP password,
+  a WhatsApp token, or an IRC password. Never commit any of them, an org ID, a
+  state file, or `config.env`.
 
 ## Commits
 

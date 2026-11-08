@@ -79,6 +79,42 @@ class ConfigTests(unittest.TestCase):
             with self.assertRaisesRegex(watch.ConfigError, "greater than zero"):
                 watch.Config(path)
 
+    def test_builds_every_configured_channel(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.env"
+            path.write_text(
+                "MATTERMOST_WEBHOOK_URL=https://mm.invalid/hook\n"
+                "SLACK_WEBHOOK_URL=https://slack.invalid/hook\n"
+                "DISCORD_WEBHOOK_URL=https://discord.invalid/hook\n"
+                "IRC_HOST=irc.invalid\nIRC_CHANNEL=#alerts\n"
+                "SMTP_HOST=smtp.invalid\nEMAIL_FROM=from@example.invalid\n"
+                "EMAIL_TO=a@example.invalid, b@example.invalid\n"
+                "WHATSAPP_TOKEN=token\nWHATSAPP_PHONE_NUMBER_ID=123\n"
+                "WHATSAPP_TO=456\n",
+                encoding="utf-8",
+            )
+            channels = watch.Config(path).channels()
+            self.assertEqual(
+                channels.names(),
+                ["mattermost", "slack", "discord", "irc", "email", "whatsapp"],
+            )
+            self.assertEqual(channels.email_to, ("a@example.invalid", "b@example.invalid"))
+            self.assertTrue(channels.irc_tls)
+
+    def test_rejects_an_invalid_irc_port(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.env"
+            path.write_text("IRC_PORT=not-a-port\n", encoding="utf-8")
+            with self.assertRaisesRegex(watch.ConfigError, "IRC_PORT"):
+                watch.Config(path)
+
+    def test_rejects_an_invalid_smtp_security(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.env"
+            path.write_text("SMTP_SECURITY=plain\n", encoding="utf-8")
+            with self.assertRaisesRegex(watch.ConfigError, "SMTP_SECURITY"):
+                watch.Config(path)
+
 
 class DateTests(unittest.TestCase):
     def test_parse_iso_accepts_zulu_and_naive_values(self):

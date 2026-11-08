@@ -23,6 +23,7 @@ def make_config(tmp: Path):
         console_url="https://example.invalid/console",
         limits=lambda: {"deepseek-v4.1-flash": 200.0},
         labels=lambda: {"deepseek-v4.1-flash": "DeepSeek V4.1 Flash"},
+        channels=lambda: watch.notify.Channels(mattermost_url="https://example.invalid/hook"),
     )
 
 
@@ -76,22 +77,23 @@ class PollTests(unittest.TestCase):
         self.collect_value = 5.0
         self.post_ok = True
         self._orig_collect = watch.collect
-        self._orig_post = watch.post_webhook
+        self._orig_deliver = watch.deliver
 
         def fake_collect(config, stored):
             return make_stats(self.collect_value)
 
-        def fake_post(url, text, attempts=3):
+        def fake_deliver(config, text, color):
             if self.post_ok:
                 self.sent.append(text)
-            return self.post_ok
+                return [watch.notify.Result("mattermost", True)]
+            return [watch.notify.Result("mattermost", False, "down")]
 
         watch.collect = fake_collect
-        watch.post_webhook = fake_post
+        watch.deliver = fake_deliver
 
     def tearDown(self):
         watch.collect = self._orig_collect
-        watch.post_webhook = self._orig_post
+        watch.deliver = self._orig_deliver
         self.tmp.cleanup()
 
     def state(self):
@@ -164,8 +166,8 @@ class PollTests(unittest.TestCase):
         self.assertEqual(self.state()["last_level"], 0)
         watch.collect = orig
 
-    def test_missing_webhook_exits_two(self):
-        self.config.webhook = ""
+    def test_missing_channel_exits_two(self):
+        self.config.channels = lambda: watch.notify.Channels()
         self.assertEqual(self.run_poll(), 2)
         self.assertFalse((self.dir / "state.json").exists())
 
@@ -181,6 +183,14 @@ class PollTests(unittest.TestCase):
         self.post_ok = False
         self.assertEqual(self.run_poll(), 1)
         self.assertFalse((self.dir / "state.json").exists())
+
+    def test_partial_delivery_still_initializes(self):
+        watch.deliver = lambda config, text, color: [
+            watch.notify.Result("mattermost", True),
+            watch.notify.Result("slack", False, "down"),
+        ]
+        self.assertEqual(self.run_poll(), 0)
+        self.assertTrue(self.state()["initialized"])
 
     def test_reset_delivery_failure_exits_one(self):
         self.run_poll()

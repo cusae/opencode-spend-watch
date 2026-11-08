@@ -18,6 +18,10 @@ All notable changes to this project are documented here. The format follows
 - Configuration validation: a non-numeric or non-positive threshold is a
   configuration error, not a traceback.
 - `CRON_INTERVAL_MINUTES` for `install.sh`; the default is 15 minutes.
+- Coloured Mattermost attachments and status emoji: green below 50% used,
+  amber from 50%, red from 80%.
+- Slack, Discord, IRC, email, and WhatsApp notification backends. Several
+  channels can run together with per-channel failure isolation.
 
 ### Changed
 

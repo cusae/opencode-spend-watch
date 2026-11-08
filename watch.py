@@ -36,9 +36,15 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+import notify
+
 API_BASE = "https://opencode.ai"
 USER_AGENT = "opencode-spend-watch/1.0"
 VERSION = "1.0.0"
+COLOR_GREEN = "#2e7d32"
+COLOR_AMBER = "#f9a825"
+COLOR_RED = "#c62828"
+COLOR_BLUE = "#1e88e5"
 MICROCENTS = 100_000_000  # 1 USD = 1e8 microcents
 DEFAULT_CONFIG = Path(__file__).with_name("config.env")
 DEFAULT_LIMITS = Path(__file__).with_name("limits.json")
@@ -107,6 +113,49 @@ class Config:
         self.reset_message = env.get("RESET_MESSAGE", "true").lower() == "true"
         self.console_url = env.get("CONSOLE_URL", "").strip()
         self.limits_path = Path(env.get("LIMITS_FILE", str(DEFAULT_LIMITS))).expanduser()
+        security = env.get("SMTP_SECURITY", "starttls").strip().lower()
+        if security not in ("starttls", "ssl", "none"):
+            raise ConfigError("SMTP_SECURITY must be one of starttls, ssl, or none")
+        self._channels = notify.Channels(
+            mattermost_url=self.webhook,
+            slack_url=env.get("SLACK_WEBHOOK_URL", "").strip(),
+            discord_url=env.get("DISCORD_WEBHOOK_URL", "").strip(),
+            irc_host=env.get("IRC_HOST", "").strip(),
+            irc_port=self._integer(env, "IRC_PORT", 6697),
+            irc_tls=self._flag(env, "IRC_TLS", True),
+            irc_nick=env.get("IRC_NICK", "opencode-spend").strip(),
+            irc_channel=env.get("IRC_CHANNEL", "").strip(),
+            irc_password=env.get("IRC_PASSWORD", ""),
+            smtp_host=env.get("SMTP_HOST", "").strip(),
+            smtp_port=self._integer(env, "SMTP_PORT", 587),
+            smtp_security=security,
+            smtp_user=env.get("SMTP_USER", "").strip(),
+            smtp_password=env.get("SMTP_PASSWORD", ""),
+            email_from=env.get("EMAIL_FROM", "").strip(),
+            email_to=tuple(
+                address.strip() for address in env.get("EMAIL_TO", "").split(",") if address.strip()
+            ),
+            whatsapp_token=env.get("WHATSAPP_TOKEN", "").strip(),
+            whatsapp_phone_id=env.get("WHATSAPP_PHONE_NUMBER_ID", "").strip(),
+            whatsapp_to=env.get("WHATSAPP_TO", "").strip(),
+            whatsapp_version=env.get("WHATSAPP_API_VERSION", "v21.0").strip(),
+        )
+
+    @staticmethod
+    def _integer(env: dict[str, str], name: str, default: int) -> int:
+        raw = env.get(name, str(default)) or str(default)
+        try:
+            return int(raw)
+        except ValueError:
+            raise ConfigError(f"{name} must be an integer, got {raw!r}") from None
+
+    @staticmethod
+    def _flag(env: dict[str, str], name: str, default: bool) -> bool:
+        raw = env.get(name, "true" if default else "false").strip().lower()
+        return raw in ("1", "true", "yes", "on")
+
+    def channels(self) -> notify.Channels:
+        return self._channels
 
     def limits(self) -> dict[str, float]:
         try:
@@ -332,6 +381,45 @@ def format_percent(value: float | None) -> str:
     return f"{value:.0f}%"
 
 
+def usage_severity(stats: dict[str, Any]) -> float:
+    """Percentage used, from the monthly window and the closest model limit."""
+    monthly_raw = (stats["windows"].get("monthly") or {}).get("percent") or 0.0
+    monthly: float = float(monthly_raw)
+    closest = stats.get("closest")
+    if closest and closest["limit"]:
+        model_used = 100.0 * (1.0 - float(closest["remaining"]) / float(closest["limit"]))
+        return max(monthly, model_used)
+    return monthly
+
+
+def message_color(stats: dict[str, Any], kind: str = "threshold") -> str:
+    if kind == "reset":
+        return COLOR_GREEN
+    if kind in ("startup", "report"):
+        return COLOR_BLUE
+    level = usage_severity(stats)
+    if level >= 80:
+        return COLOR_RED
+    if level >= 50:
+        return COLOR_AMBER
+    return COLOR_GREEN
+
+
+def message_emoji(stats: dict[str, Any], kind: str = "threshold") -> str:
+    if kind == "startup":
+        return "ℹ️"
+    if kind == "reset":
+        return "🔄"
+    if kind == "report":
+        return "📊"
+    level = usage_severity(stats)
+    if level >= 80:
+        return "🔴"
+    if level >= 50:
+        return "🟡"
+    return "🟢"
+
+
 def build_message(
     stats: dict[str, Any],
     crossed_from: float | None,
@@ -377,6 +465,8 @@ def build_message(
         else:
             lead = f"**{money(stats['period_total'])}** used this period."
 
+    title = f"{message_emoji(stats, kind)} {title}"
+
     lines = [
         title,
         lead,
@@ -420,35 +510,33 @@ def build_message(
 # --------------------------------------------------------------------------- delivery
 
 
-def post_webhook(url: str, text: str, attempts: int = 3) -> bool:
-    parsed = urllib.parse.urlsplit(url)
-    if parsed.scheme not in ("http", "https") or not parsed.netloc:
-        log("MATTERMOST_WEBHOOK_URL must be an http(s) URL")
+def post_webhook(url: str, text: str, attempts: int = 3, color: str = COLOR_BLUE) -> bool:
+    """Mattermost-only helper kept for compatibility with older callers."""
+    try:
+        notify.send_mattermost(url, text, color, attempts)
+    except notify.DeliveryError as exc:
+        log(f"Mattermost delivery failed: {exc}")
         return False
-    payload = json.dumps(
-        {
-            "text": text,
-            "username": "OpenCode Spend",
-            "icon_emoji": ":money_with_wings:",
-        }
-    ).encode("utf-8")
-    for attempt in range(1, attempts + 1):
-        request = urllib.request.Request(
-            url,
-            data=payload,
-            headers={"Content-Type": "application/json", "User-Agent": USER_AGENT},
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=15) as response:
-                if 200 <= response.status < 300:
-                    return True
-                log(f"Mattermost returned HTTP {response.status}")
-        except (urllib.error.URLError, OSError) as exc:
-            log(f"Mattermost delivery failed (attempt {attempt}/{attempts}): {exc}")
-        if attempt < attempts:
-            time.sleep(2)
-    return False
+    return True
+
+
+def deliver(config: Config, text: str, color: str) -> list[notify.Result]:
+    return notify.send_all(config.channels(), text, color)
+
+
+def delivery_ok(results: list[notify.Result]) -> bool:
+    if not results:
+        log("no notification channel is configured")
+        return False
+    failed = [result for result in results if not result.ok]
+    for result in failed:
+        log(f"{result.channel} delivery failed: {result.error}")
+    if len(failed) == len(results):
+        log("every notification channel failed; will retry")
+        return False
+    if failed:
+        log("partial delivery; failed: " + ", ".join(result.channel for result in failed))
+    return True
 
 
 # --------------------------------------------------------------------------- state
@@ -495,8 +583,8 @@ class Store:
 
 
 def poll(config: Config) -> int:
-    if not config.webhook:
-        log("MATTERMOST_WEBHOOK_URL is not set; cannot send alerts.")
+    if not config.channels().names():
+        log("no notification channel is configured; set MATTERMOST_WEBHOOK_URL or another backend.")
         return 2
 
     store = Store(config.state_dir)
@@ -511,11 +599,15 @@ def poll(config: Config) -> int:
         period_end = stats["period_end"].isoformat()
         new_period = state.get("period_end") != period_end
         if new_period and state.get("period_end"):
-            if config.reset_message and not post_webhook(
-                config.webhook, build_message(stats, None, None, config, "reset")
-            ):
-                log("reset message failed; will retry on next run")
-                return 1
+            if config.reset_message:
+                results = deliver(
+                    config,
+                    build_message(stats, None, None, config, "reset"),
+                    message_color(stats, "reset"),
+                )
+                if not delivery_ok(results):
+                    log("reset message failed; will retry on next run")
+                    return 1
             state = {
                 "period_end": period_end,
                 "daily": state.get("daily", {}),
@@ -524,11 +616,15 @@ def poll(config: Config) -> int:
             }
 
         if not state.get("initialized"):
-            if config.startup_message and not post_webhook(
-                config.webhook, build_message(stats, None, None, config, "startup")
-            ):
-                log("startup message failed; will retry on next run")
-                return 1
+            if config.startup_message:
+                results = deliver(
+                    config,
+                    build_message(stats, None, None, config, "startup"),
+                    message_color(stats, "startup"),
+                )
+                if not delivery_ok(results):
+                    log("startup message failed; will retry on next run")
+                    return 1
             state.update(
                 {
                     "period_end": period_end,
@@ -552,7 +648,8 @@ def poll(config: Config) -> int:
             crossed_from = last_level * config.step
             crossed_to = level * config.step
             text = build_message(stats, crossed_from, crossed_to, config)
-            if not post_webhook(config.webhook, text):
+            results = deliver(config, text, message_color(stats))
+            if not delivery_ok(results):
                 store.save(state)
                 log("alert not delivered; level not advanced, will retry")
                 return 1
@@ -606,23 +703,32 @@ def check(config: Config) -> int:
     print(f"windows: {json.dumps(cleaned)}")
     print(f"daily: {len(days)} days, total {money(sum(days.values()))}")
     print(f"models: {len(models)}")
-    print(f"webhook: {'set' if config.webhook else 'MISSING'}")
+    names = config.channels().names()
+    print(f"channels: {', '.join(names) or 'none'}")
     print(f"plan: {config.plan} ({len(config.limits())} model limits)")
+    if not names:
+        print("channels: FAIL configure at least one channel")
+        return 1
     return 0
 
 
 def test_webhook(config: Config) -> int:
-    if not config.webhook:
-        print("MATTERMOST_WEBHOOK_URL is not set.")
+    names = config.channels().names()
+    if not names:
+        print("no notification channel is configured.")
         return 2
     text = (
         "**OpenCode spend watcher — test message**\n"
-        f"If you can read this, alerts will arrive in this channel every "
-        f"${config.step:.0f} of OpenCode usage."
+        f"If you can read this, alerts will arrive on these channels every "
+        f"${config.step:.0f} of OpenCode usage: {', '.join(names)}."
     )
-    ok = post_webhook(config.webhook, text, attempts=1)
-    print("sent" if ok else "failed")
-    return 0 if ok else 1
+    results = deliver(config, text, COLOR_BLUE)
+    if not delivery_ok(results):
+        print("failed")
+        return 1
+    delivered = [result.channel for result in results if result.ok]
+    print(f"sent to {len(delivered)}/{len(results)} channel(s): {', '.join(delivered)}")
+    return 0
 
 
 def main(argv: list[str]) -> int:

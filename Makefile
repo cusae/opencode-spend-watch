@@ -34,7 +34,7 @@ format-check: ## Verify formatting without changing files
 	$(RUFF) format --check .
 
 types: ## Type-check watch.py
-	$(MYPY) watch.py
+	$(MYPY) watch.py notify.py
 
 test: ## Run the Python tests
 	$(PYTHON) -m py_compile watch.py

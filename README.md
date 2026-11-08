@@ -2,7 +2,7 @@
 
 # opencode-spend-watch
 
-**Dollar-by-dollar Mattermost alerts for OpenCode usage.**
+**Dollar-by-dollar alerts for OpenCode usage, wherever your team talks.**
 
 <br>
 
@@ -16,9 +16,9 @@
 
 </div>
 
-A small Python watcher that reads exact OpenCode usage in USD and posts a
-Mattermost message every time spend in the current billing period crosses
-another whole dollar. It reports the amount used, the remaining monthly
+A small Python watcher that reads exact OpenCode usage in USD and posts an
+alert every time spend in the current billing period crosses another whole
+dollar: Mattermost, Slack, Discord, IRC, email, or WhatsApp. It reports the amount used, the remaining monthly
 allowance, the 5-hour, weekly, and monthly windows, today's spend, the top
 models, and the limit with the least headroom.
 
@@ -37,6 +37,11 @@ Standard library only. No database. No secret in the repository.
 - **Full context.** Remaining allowance, window percentages and reset times,
   today and last-7-day spend, top models, closest per-model limit, console
   link.
+- **Coloured severity.** Mattermost and Slack attachments, Discord embeds,
+  and a status emoji turn amber at 50% used and red at 80%, using the higher
+  of the monthly window and the closest model limit.
+- **Many channels.** Mattermost, Slack, Discord, IRC, email, and WhatsApp can
+  be enabled together; one failing channel does not block the others.
 - **Safe by default.** The OpenCode key is read read-only and never logged,
   printed, or sent. `config.env` is git-ignored and mode 600.
 - **Cron-sized.** One process, one state file, one file lock, stdlib only.
@@ -69,7 +74,7 @@ flowchart LR
     Watch --> Usage[OpenCode usage API]
     Watch --> Costs[OpenCode cost API]
     Watch --> State[(state.json)]
-    Watch -->|threshold crossed| Mattermost
+    Watch -->|threshold crossed| Channels[Mattermost / Slack / Discord / IRC / email / WhatsApp]
 ```
 
 The watcher reads three undocumented OpenCode Console endpoints with the Go
@@ -81,6 +86,12 @@ key already stored locally:
 | `/console/api/usage/cost-by-day?range=30d` | exact cost per UTC day |
 | `/console/api/usage/models?range=30d` | exact cost per model |
 
+Every channel gets the same content. Mattermost and Slack render a coloured
+attachment, Discord a coloured embed, email an HTML colour bar; IRC and
+WhatsApp receive plain text. Green below 50% used, amber from 50%, red from
+80%. Startup is blue and a period reset is green. Severity uses the monthly
+percentage and the closest model limit.
+
 The billing period comes from the monthly `resetsAt` timestamp. Spend is the
 sum of daily costs from the period start. The threshold level is
 `floor(spend / step)`; a message is sent when that level increases.
@@ -91,7 +102,7 @@ schema, failure model, and API contract.
 ### Message format
 
 ```text
-**OpenCode spend — threshold reached**
+🟢 **OpenCode spend — threshold reached**
 **$6.05** used this period (crossed $6.00).
 
 Billing period: 27 Oct 2026 14:09 UTC → 27 Nov 2026 14:09 UTC
@@ -111,15 +122,17 @@ Closest limit: **DeepSeek V4.1 Flash** — $196.14 left of $200.00 (98%)
 
 - Python 3.10 or later, standard library only
 - OpenCode with the OpenCode Go integration connected
-- A Mattermost Incoming Webhook
+- At least one notification channel: Mattermost, Slack, Discord, IRC, email, or WhatsApp
 - Linux or macOS for cron; systemd timers work too
 
 ---
 
 ## Installation
 
-1. Create an Incoming Webhook in Mattermost:
-   **Integrations > Incoming Webhooks > Add**, and choose the channel.
+1. Create at least one notification destination: a Mattermost or Slack
+   Incoming Webhook, a Discord webhook, an IRC channel, an SMTP account, or a
+   WhatsApp Cloud API app. The [operations guide](docs/operations.md) lists the
+   fields for each.
 2. Create the configuration:
 
    ```console
@@ -127,9 +140,9 @@ Closest limit: **DeepSeek V4.1 Flash** — $196.14 left of $200.00 (98%)
    $ chmod 600 config.env
    ```
 
-3. Set `MATTERMOST_WEBHOOK_URL`. Keep the value quoted if it contains `&`,
-   `?`, or `#`.
-4. Validate the key, APIs, and webhook:
+3. Fill in at least one channel. Keep webhook values quoted if they contain
+   `&`, `?`, or `#`.
+4. Validate the key, APIs, and every configured channel:
 
    ```console
    $ python3 watch.py check
@@ -151,7 +164,7 @@ by `# opencode-spend-watch`.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `MATTERMOST_WEBHOOK_URL` | empty | Required. Channel is fixed by the webhook. |
+| `MATTERMOST_WEBHOOK_URL` | empty | Mattermost Incoming Webhook. |
 | `PLAN` | `go-plus` | `go-plus` or `go`; selects limits from `limits.json`. |
 | `THRESHOLD_STEP_USD` | `1` | Alert step in dollars; must be positive. |
 | `CRON_INTERVAL_MINUTES` | `15` | Minutes between cron checks (1–59). |
@@ -162,6 +175,24 @@ by `# opencode-spend-watch`.
 | `STARTUP_MESSAGE` | `true` | Send the first-run message. |
 | `RESET_MESSAGE` | `true` | Send a message when the period resets. |
 | `LIMITS_FILE` | `limits.json` | Per-model monthly limits. |
+
+At least one channel is required; several can run together. Delivery is
+isolated per channel: a broken backend is logged and the healthy ones still
+receive the alert.
+
+| Channel | Variables |
+| --- | --- |
+| Mattermost | `MATTERMOST_WEBHOOK_URL` |
+| Slack | `SLACK_WEBHOOK_URL` |
+| Discord | `DISCORD_WEBHOOK_URL` |
+| IRC | `IRC_HOST`, `IRC_PORT`, `IRC_TLS`, `IRC_NICK`, `IRC_CHANNEL`, `IRC_PASSWORD` |
+| Email | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_FROM`, `EMAIL_TO` |
+| WhatsApp | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TO`, `WHATSAPP_API_VERSION` |
+
+IRC defaults to port 6697 with TLS, SHA-256 verified by the system trust
+store. Email uses STARTTLS by default; `SMTP_SECURITY` accepts `starttls`,
+`ssl`, or `none`. WhatsApp uses the Meta Cloud API. `EMAIL_TO` accepts a
+comma-separated list.
 
 The full runbook, including rotation and recovery, is in
 [docs/operations.md](docs/operations.md).
@@ -216,11 +247,13 @@ More cases and recovery steps: [docs/operations.md](docs/operations.md).
 
 ## Security
 
-- `config.env` holds only the webhook URL; it is git-ignored and mode 600.
+- `config.env` holds webhook URLs, SMTP credentials, and the WhatsApp token;
+  it is git-ignored and mode 600.
 - The OpenCode key stays in OpenCode's database and is read read-only.
-- No key material appears in logs or Mattermost messages.
-- The webhook URL is validated before every delivery.
-- Never commit `config.env`, a webhook URL, a key, or an org ID.
+- No key material appears in logs or messages.
+- Webhook URLs are validated before every delivery; IRC uses TLS by default.
+- Never commit `config.env`, a webhook URL, a password, a token, a key, or an
+  org ID.
 
 Report vulnerabilities privately through
 [GitHub Security Advisories](https://github.com/cusae/opencode-spend-watch/security/advisories/new).
@@ -243,6 +276,7 @@ checks, plus a Python 3.10–3.14 matrix, CodeQL, and Dependabot.
 | Path | Content |
 | --- | --- |
 | `watch.py` | the watcher |
+| `notify.py` | notification backends |
 | `limits.json` | per-model monthly limits and display names |
 | `install.sh` | validation and cron installation |
 | `test/python/` | unit tests |

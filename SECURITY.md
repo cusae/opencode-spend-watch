@@ -18,24 +18,27 @@ secret removed.
 
 ## Scope
 
-The watcher handles two secrets:
+The watcher handles these secrets:
 
 - the OpenCode Go key, read read-only from OpenCode's own database;
-- the Mattermost webhook URL, stored in the local `config.env`.
+- webhook URLs for Mattermost, Slack, and Discord;
+- IRC, SMTP, and WhatsApp credentials in the local `config.env`.
 
-Both stay outside the repository. `config.env` is created with mode 600 and is
+All stay outside the repository. `config.env` is created with mode 600 and is
 git-ignored. The key is never logged, printed, or included in a message. Only
 its length is printed by `watch.py check`.
 
 The tool has no runtime third-party dependency. It talks to three OpenCode
-Console endpoints and one Mattermost webhook, all over HTTPS.
+Console endpoints and the configured notification channels. Webhooks, SMTP, and the WhatsApp API use HTTPS; IRC uses TLS by default.
 
 ## Threat model
 
-- A local attacker who can read `config.env` can post to the Mattermost
-  channel. Protect the file permissions and the account.
-- A compromised webhook can receive the spend reports. Treat the URL as a
-  credential and rotate it if it leaks.
+- A local attacker who can read `config.env` can post to every configured
+  channel. Protect the file permissions and the accounts.
+- A compromised webhook, token, or password can receive the spend reports.
+  Treat every channel credential as a secret and rotate it if it leaks.
+- IRC uses TLS with certificate verification by default. Disabling `IRC_TLS`
+  exposes the channel password and the reports to the network.
 - The OpenCode Console endpoints are undocumented. A change there can break
   collection; it cannot expose the key through this tool.
 - The watcher only reads usage and posts messages. It never changes billing,

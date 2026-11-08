@@ -136,7 +136,9 @@ class DeliveryTests(unittest.TestCase):
         with mock.patch.object(watch.urllib.request, "urlopen", return_value=response) as urlopen:
             self.assertTrue(watch.post_webhook("https://example.invalid/hook", "hello"))
         request = urlopen.call_args.args[0]
-        self.assertEqual(json.loads(request.data)["text"], "hello")
+        attachment = json.loads(request.data)["attachments"][0]
+        self.assertEqual(attachment["text"], "hello")
+        self.assertEqual(attachment["color"], watch.COLOR_BLUE)
 
     def test_post_webhook_returns_false_after_a_failure(self):
         with mock.patch.object(
@@ -175,6 +177,7 @@ class CommandTests(unittest.TestCase):
             console_url="",
             limits=lambda: {"m1": 10.0},
             labels=lambda: {},
+            channels=lambda: watch.notify.Channels(mattermost_url="https://example.invalid/hook"),
         )
         self.stats = {
             "windows": {"monthly": {"percent": 3.0, "resets_at": None}},
@@ -211,20 +214,28 @@ class CommandTests(unittest.TestCase):
         ):
             self.assertEqual(watch.check(self.config), 1)
 
-    def test_test_webhook_requires_a_url(self):
-        config = SimpleNamespace(webhook="", step=1.0)
+    def test_test_webhook_requires_a_channel(self):
+        config = SimpleNamespace(step=1.0, channels=lambda: watch.notify.Channels())
         self.assertEqual(watch.test_webhook(config), 2)
 
     def test_test_webhook_sends(self):
         with (
-            mock.patch.object(watch, "post_webhook", return_value=True),
+            mock.patch.object(
+                watch,
+                "deliver",
+                return_value=[watch.notify.Result("mattermost", True)],
+            ),
             redirect_stdout(io.StringIO()),
         ):
             self.assertEqual(watch.test_webhook(self.config), 0)
 
     def test_test_webhook_reports_a_failure(self):
         with (
-            mock.patch.object(watch, "post_webhook", return_value=False),
+            mock.patch.object(
+                watch,
+                "deliver",
+                return_value=[watch.notify.Result("mattermost", False, "down")],
+            ),
             redirect_stdout(io.StringIO()),
         ):
             self.assertEqual(watch.test_webhook(self.config), 1)
@@ -236,6 +247,28 @@ class CommandTests(unittest.TestCase):
         ):
             self.assertEqual(watch.report(self.config), 0)
         self.assertIn("current status", output.getvalue())
+
+    def test_check_reports_missing_channels(self):
+        config = SimpleNamespace(
+            api_key_override="oc_key",
+            opencode_db=Path("/nonexistent"),
+            webhook="",
+            plan="go-plus",
+            step=1.0,
+            state_dir=self.dir,
+            limits=lambda: {},
+            labels=lambda: {},
+            channels=lambda: watch.notify.Channels(),
+        )
+        with (
+            mock.patch.object(watch, "opencode_go_key", return_value="oc_key"),
+            mock.patch.object(watch, "fetch_windows", return_value={}),
+            mock.patch.object(watch, "fetch_daily", return_value={}),
+            mock.patch.object(watch, "fetch_models", return_value=[]),
+            redirect_stdout(io.StringIO()) as output,
+        ):
+            self.assertEqual(watch.check(config), 1)
+        self.assertIn("configure at least one channel", output.getvalue())
 
     def test_check_reports_a_missing_key(self):
         with (
@@ -285,6 +318,22 @@ class CommandTests(unittest.TestCase):
         self.assertIn("configuration error", output.getvalue())
 
 
+class DeliveryResultTests(unittest.TestCase):
+    def test_partial_delivery_counts_as_delivered(self):
+        results = [
+            watch.notify.Result("mattermost", True),
+            watch.notify.Result("slack", False, "down"),
+        ]
+        with redirect_stdout(io.StringIO()):
+            self.assertTrue(watch.delivery_ok(results))
+
+    def test_every_channel_failing_is_a_failure(self):
+        results = [watch.notify.Result("mattermost", False, "down")]
+        with redirect_stdout(io.StringIO()):
+            self.assertFalse(watch.delivery_ok(results))
+            self.assertFalse(watch.delivery_ok([]))
+
+
 class MessageBranchTests(unittest.TestCase):
     def setUp(self):
         self.config = SimpleNamespace(step=1.0, console_url="", labels=lambda: {})
@@ -317,6 +366,37 @@ class MessageBranchTests(unittest.TestCase):
         stats["windows"] = {}
         text = watch.build_message(stats, None, None, self.config)
         self.assertIn("n/a", text)
+
+    def test_colors_follow_the_monthly_percentage(self):
+        stats = self.stats()
+        for percent, color, emoji in (
+            (10.0, watch.COLOR_GREEN, "🟢"),
+            (60.0, watch.COLOR_AMBER, "🟡"),
+            (90.0, watch.COLOR_RED, "🔴"),
+        ):
+            stats["windows"] = {"monthly": {"percent": percent, "resets_at": None}}
+            self.assertEqual(watch.message_color(stats), color)
+            self.assertEqual(watch.message_emoji(stats), emoji)
+
+    def test_the_closest_model_limit_can_raise_the_severity(self):
+        stats = self.stats()
+        stats["windows"] = {"monthly": {"percent": 1.0, "resets_at": None}}
+        stats["closest"] = {
+            "model": "m1",
+            "limit": 10.0,
+            "remaining": 1.0,
+            "cost": 9.0,
+        }
+        self.assertEqual(watch.message_color(stats), watch.COLOR_RED)
+        self.assertEqual(watch.usage_severity(stats), 90.0)
+
+    def test_startup_reset_and_report_have_fixed_colors(self):
+        stats = self.stats()
+        self.assertEqual(watch.message_color(stats, "startup"), watch.COLOR_BLUE)
+        self.assertEqual(watch.message_color(stats, "reset"), watch.COLOR_GREEN)
+        self.assertEqual(watch.message_color(stats, "report"), watch.COLOR_BLUE)
+        self.assertIn("ℹ️", watch.build_message(stats, None, None, self.config, "startup"))
+        self.assertIn("🔄", watch.build_message(stats, None, None, self.config, "reset"))
 
 
 if __name__ == "__main__":

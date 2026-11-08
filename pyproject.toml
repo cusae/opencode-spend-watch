@@ -23,7 +23,7 @@ strict = true
 
 [tool.coverage.run]
 branch = true
-source = ["watch"]
+source = ["watch", "notify"]
 
 [tool.coverage.report]
 fail_under = 90
