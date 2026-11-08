@@ -50,6 +50,18 @@ write_config() {
 	grep -q '^\*/15 \* \* \* \*' "$CRONTAB_OUT"
 }
 
+@test "accepts a non-Mattermost channel" {
+	stub_tools
+	cat >config.env <<EOF
+SLACK_WEBHOOK_URL="https://example.invalid/slack"
+STATE_DIR=$TMPDIR_TEST/state
+EOF
+	chmod 600 config.env
+	run ./install.sh
+	[ "$status" -eq 0 ]
+	grep -q '^\*/15 \* \* \* \*' "$CRONTAB_OUT"
+}
+
 @test "accepts a custom cron interval" {
 	stub_tools
 	write_config 7
@@ -100,14 +112,14 @@ write_config() {
 	grep -q '^SENTINEL=yes$' config.env
 }
 
-@test "refuses to continue while the webhook is empty" {
+@test "refuses to continue without a notification channel" {
 	./install.sh >/dev/null 2>&1
 	run ./install.sh
 	[ "$status" -eq 1 ]
-	[[ "$output" == *"MATTERMOST_WEBHOOK_URL is empty"* ]]
+	[[ "$output" == *"at least one notification channel"* ]]
 }
 
-@test "does not call crontab before the webhook is set" {
+@test "does not call crontab before a channel is configured" {
 	mkdir -p bin
 	cat >bin/crontab <<'EOF'
 #!/bin/sh

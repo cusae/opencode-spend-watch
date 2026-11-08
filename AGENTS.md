@@ -5,20 +5,22 @@ Guidance for agents working in this repository.
 ## Project
 
 `watch.py` polls OpenCode's console API for exact usage in USD, keeps a local
-daily history, and posts a Mattermost message every time spend in the current
-billing period crosses another whole dollar. It also reports the remaining
+daily history, and posts an alert every time spend in the current billing
+period crosses another whole dollar. It also reports the remaining
 monthly allowance, the 5-hour/weekly/monthly window percentages, today's
 spend, the top models, and the per-model limit with the least headroom.
 
-The OpenCode Go key is read from OpenCode's own database
-(`~/.local/share/opencode/opencode.db`, table `credential`, integration
-`opencode-go`). No secret is stored in this repository.
+Alerts fan out to any configured combination of Mattermost, Slack, Discord,
+IRC, email, and WhatsApp. The OpenCode Go key is read from OpenCode's own
+database (`~/.local/share/opencode/opencode.db`, table `credential`,
+integration `opencode-go`). No secret is stored in this repository.
 
 ## Repository layout
 
 | Path | Content |
 | --- | --- |
-| `watch.py` | the watcher, CLI, API clients, state, delivery |
+| `watch.py` | the watcher, CLI, API clients, state, delivery orchestration |
+| `notify.py` | Mattermost, Slack, Discord, IRC, email, and WhatsApp backends |
 | `limits.json` | per-model monthly limits and display labels |
 | `install.sh` | validation, test message, cron installation |
 | `config.example.env` | empty template; `config.env` is local and ignored |
@@ -69,7 +71,7 @@ Run `make check` before every commit. It runs:
 ```console
 $ ruff check .
 $ ruff format --check .
-$ mypy watch.py                 # strict mode, configured in pyproject.toml
+$ mypy watch.py notify.py                 # strict mode, configured in pyproject.toml
 $ python3 -m py_compile watch.py
 $ coverage run -m unittest discover -s test/python -t . -v
 $ coverage report               # 90% minimum
@@ -102,8 +104,8 @@ pull request. Keep `CHANGELOG.md` current under `[Unreleased]`.
 ## Configuration and secrets
 
 - `config.env` is local, mode 600, and git-ignored. Never commit it.
-- Never commit a Mattermost webhook URL, an OpenCode key, an org ID, or a state
-  file.
+- Never commit a webhook URL, SMTP password, WhatsApp token, IRC password, an
+  OpenCode key, an org ID, or a state file.
 - `config.example.env` stays empty: `MATTERMOST_WEBHOOK_URL=""` and
   `CONSOLE_URL=""`.
 - Do not log the key or put it in a message. Only its length may be printed by
@@ -117,7 +119,8 @@ pull request. Keep `CHANGELOG.md` current under `[Unreleased]`.
 - Line length 100. Type annotations are mandatory: `mypy --strict watch.py`
   must pass.
 - Keep `main()` dispatch, the `Store` lock, and the exit codes: cron and manual
-  runs can overlap, and a failed delivery must leave state unchanged.
+  runs can overlap. If every channel fails, leave state unchanged; a partial
+  delivery may advance the checkpoint so healthy channels are not spammed.
 - Validate configuration in `Config`; raise `ConfigError` for an invalid
   threshold. Never let a malformed `config.env` produce a traceback.
 - Comments explain why, not what.
