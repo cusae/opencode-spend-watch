@@ -239,7 +239,7 @@ def send_irc(channels: Channels, text: str) -> None:
     try:
         sock = socket.create_connection((host, port), timeout=15)
         if channels.irc_tls:
-            sock = ssl.create_default_context().wrap_socket(sock, server_hostname=host)
+            sock = _tls_context().wrap_socket(sock, server_hostname=host)
         stream = sock.makefile("rwb", buffering=0)
         if channels.irc_password:
             _irc_write(stream, f"PASS {channels.irc_password}")
