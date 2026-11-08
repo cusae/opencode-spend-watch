@@ -82,8 +82,9 @@ class DeliveryError(RuntimeError):
 
 
 def _tls_context() -> ssl.SSLContext:
-    context = ssl.create_default_context()
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
+    context.load_default_certs(ssl.Purpose.SERVER_AUTH)
     return context
 
 
