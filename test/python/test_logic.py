@@ -81,7 +81,7 @@ class PollTests(unittest.TestCase):
         def fake_collect(config, stored):
             return make_stats(self.collect_value)
 
-        def fake_post(url, text, attempts=3):
+        def fake_post(url, text, attempts=3, color=None):
             if self.post_ok:
                 self.sent.append(text)
             return self.post_ok

@@ -136,7 +136,9 @@ class DeliveryTests(unittest.TestCase):
         with mock.patch.object(watch.urllib.request, "urlopen", return_value=response) as urlopen:
             self.assertTrue(watch.post_webhook("https://example.invalid/hook", "hello"))
         request = urlopen.call_args.args[0]
-        self.assertEqual(json.loads(request.data)["text"], "hello")
+        attachment = json.loads(request.data)["attachments"][0]
+        self.assertEqual(attachment["text"], "hello")
+        self.assertEqual(attachment["color"], watch.COLOR_BLUE)
 
     def test_post_webhook_returns_false_after_a_failure(self):
         with mock.patch.object(
@@ -317,6 +319,37 @@ class MessageBranchTests(unittest.TestCase):
         stats["windows"] = {}
         text = watch.build_message(stats, None, None, self.config)
         self.assertIn("n/a", text)
+
+    def test_colors_follow_the_monthly_percentage(self):
+        stats = self.stats()
+        for percent, color, emoji in (
+            (10.0, watch.COLOR_GREEN, "🟢"),
+            (60.0, watch.COLOR_AMBER, "🟡"),
+            (90.0, watch.COLOR_RED, "🔴"),
+        ):
+            stats["windows"] = {"monthly": {"percent": percent, "resets_at": None}}
+            self.assertEqual(watch.message_color(stats), color)
+            self.assertEqual(watch.message_emoji(stats), emoji)
+
+    def test_the_closest_model_limit_can_raise_the_severity(self):
+        stats = self.stats()
+        stats["windows"] = {"monthly": {"percent": 1.0, "resets_at": None}}
+        stats["closest"] = {
+            "model": "m1",
+            "limit": 10.0,
+            "remaining": 1.0,
+            "cost": 9.0,
+        }
+        self.assertEqual(watch.message_color(stats), watch.COLOR_RED)
+        self.assertEqual(watch.usage_severity(stats), 90.0)
+
+    def test_startup_reset_and_report_have_fixed_colors(self):
+        stats = self.stats()
+        self.assertEqual(watch.message_color(stats, "startup"), watch.COLOR_BLUE)
+        self.assertEqual(watch.message_color(stats, "reset"), watch.COLOR_GREEN)
+        self.assertEqual(watch.message_color(stats, "report"), watch.COLOR_BLUE)
+        self.assertIn("ℹ️", watch.build_message(stats, None, None, self.config, "startup"))
+        self.assertIn("🔄", watch.build_message(stats, None, None, self.config, "reset"))
 
 
 if __name__ == "__main__":

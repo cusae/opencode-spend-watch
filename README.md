@@ -37,6 +37,9 @@ Standard library only. No database. No secret in the repository.
 - **Full context.** Remaining allowance, window percentages and reset times,
   today and last-7-day spend, top models, closest per-model limit, console
   link.
+- **Coloured severity.** The Mattermost attachment bar and a status emoji turn
+  amber at 50% used and red at 80%, using the higher of the monthly window and
+  the closest model limit.
 - **Safe by default.** The OpenCode key is read read-only and never logged,
   printed, or sent. `config.env` is git-ignored and mode 600.
 - **Cron-sized.** One process, one state file, one file lock, stdlib only.
@@ -81,6 +84,10 @@ key already stored locally:
 | `/console/api/usage/cost-by-day?range=30d` | exact cost per UTC day |
 | `/console/api/usage/models?range=30d` | exact cost per model |
 
+Messages are Mattermost attachments with a severity colour: green below
+50% used, amber from 50%, red from 80%. Startup is blue and a period reset is
+green. Severity uses the monthly percentage and the closest model limit.
+
 The billing period comes from the monthly `resetsAt` timestamp. Spend is the
 sum of daily costs from the period start. The threshold level is
 `floor(spend / step)`; a message is sent when that level increases.
@@ -91,7 +98,7 @@ schema, failure model, and API contract.
 ### Message format
 
 ```text
-**OpenCode spend — threshold reached**
+🟢 **OpenCode spend — threshold reached**
 **$6.05** used this period (crossed $6.00).
 
 Billing period: 27 Oct 2026 14:09 UTC → 27 Nov 2026 14:09 UTC

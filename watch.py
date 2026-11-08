@@ -39,6 +39,10 @@ from typing import Any
 API_BASE = "https://opencode.ai"
 USER_AGENT = "opencode-spend-watch/1.0"
 VERSION = "1.0.0"
+COLOR_GREEN = "#2e7d32"
+COLOR_AMBER = "#f9a825"
+COLOR_RED = "#c62828"
+COLOR_BLUE = "#1e88e5"
 MICROCENTS = 100_000_000  # 1 USD = 1e8 microcents
 DEFAULT_CONFIG = Path(__file__).with_name("config.env")
 DEFAULT_LIMITS = Path(__file__).with_name("limits.json")
@@ -332,6 +336,45 @@ def format_percent(value: float | None) -> str:
     return f"{value:.0f}%"
 
 
+def usage_severity(stats: dict[str, Any]) -> float:
+    """Percentage used, from the monthly window and the closest model limit."""
+    monthly_raw = (stats["windows"].get("monthly") or {}).get("percent") or 0.0
+    monthly: float = float(monthly_raw)
+    closest = stats.get("closest")
+    if closest and closest["limit"]:
+        model_used = 100.0 * (1.0 - float(closest["remaining"]) / float(closest["limit"]))
+        return max(monthly, model_used)
+    return monthly
+
+
+def message_color(stats: dict[str, Any], kind: str = "threshold") -> str:
+    if kind == "reset":
+        return COLOR_GREEN
+    if kind in ("startup", "report"):
+        return COLOR_BLUE
+    level = usage_severity(stats)
+    if level >= 80:
+        return COLOR_RED
+    if level >= 50:
+        return COLOR_AMBER
+    return COLOR_GREEN
+
+
+def message_emoji(stats: dict[str, Any], kind: str = "threshold") -> str:
+    if kind == "startup":
+        return "ℹ️"
+    if kind == "reset":
+        return "🔄"
+    if kind == "report":
+        return "📊"
+    level = usage_severity(stats)
+    if level >= 80:
+        return "🔴"
+    if level >= 50:
+        return "🟡"
+    return "🟢"
+
+
 def build_message(
     stats: dict[str, Any],
     crossed_from: float | None,
@@ -377,6 +420,8 @@ def build_message(
         else:
             lead = f"**{money(stats['period_total'])}** used this period."
 
+    title = f"{message_emoji(stats, kind)} {title}"
+
     lines = [
         title,
         lead,
@@ -420,16 +465,16 @@ def build_message(
 # --------------------------------------------------------------------------- delivery
 
 
-def post_webhook(url: str, text: str, attempts: int = 3) -> bool:
+def post_webhook(url: str, text: str, attempts: int = 3, color: str = COLOR_BLUE) -> bool:
     parsed = urllib.parse.urlsplit(url)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         log("MATTERMOST_WEBHOOK_URL must be an http(s) URL")
         return False
     payload = json.dumps(
         {
-            "text": text,
             "username": "OpenCode Spend",
             "icon_emoji": ":money_with_wings:",
+            "attachments": [{"color": color, "text": text}],
         }
     ).encode("utf-8")
     for attempt in range(1, attempts + 1):
@@ -512,7 +557,9 @@ def poll(config: Config) -> int:
         new_period = state.get("period_end") != period_end
         if new_period and state.get("period_end"):
             if config.reset_message and not post_webhook(
-                config.webhook, build_message(stats, None, None, config, "reset")
+                config.webhook,
+                build_message(stats, None, None, config, "reset"),
+                color=message_color(stats, "reset"),
             ):
                 log("reset message failed; will retry on next run")
                 return 1
@@ -525,7 +572,9 @@ def poll(config: Config) -> int:
 
         if not state.get("initialized"):
             if config.startup_message and not post_webhook(
-                config.webhook, build_message(stats, None, None, config, "startup")
+                config.webhook,
+                build_message(stats, None, None, config, "startup"),
+                color=message_color(stats, "startup"),
             ):
                 log("startup message failed; will retry on next run")
                 return 1
@@ -552,7 +601,7 @@ def poll(config: Config) -> int:
             crossed_from = last_level * config.step
             crossed_to = level * config.step
             text = build_message(stats, crossed_from, crossed_to, config)
-            if not post_webhook(config.webhook, text):
+            if not post_webhook(config.webhook, text, color=message_color(stats)):
                 store.save(state)
                 log("alert not delivered; level not advanced, will retry")
                 return 1

@@ -17,7 +17,7 @@ when the current billing period crosses another whole dollar.
 | `fetch_models` | Read exact cost per model for the last 30 days. |
 | `collect` | Merge stored and fresh days, compute the period total, today, the last 7 days, and the closest limit. |
 | `build_message` | Render the Mattermost Markdown. |
-| `post_webhook` | Validate the URL and deliver with retries. |
+| `post_webhook` | Validate the URL and deliver a coloured attachment with retries. |
 | `Store` | Serialize a poll with a file lock and persist `state.json`. |
 | `poll` | Initialize, detect period resets, raise thresholds, deliver, persist. |
 
@@ -122,5 +122,7 @@ may change; `check` and the cron log identify the failing path.
   of a long period; the state file prevents that.
 - **Idempotent delivery.** Advancing the checkpoint only after a 2xx response
   makes retries safe.
+- **Severity in the payload.** Mattermost renders an attachment colour bar;
+  the colour and the status emoji share one severity calculation.
 - **One lock.** Cron, a manual poll, and `report` serialize on a file lock in
   the state directory.
