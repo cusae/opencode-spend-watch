@@ -1,0 +1,30 @@
+#!/bin/sh
+#
+# Enforce the trailer rules from AGENTS.md.
+#
+# Bypass with "git commit --no-verify". This is a guard against mistakes,
+# not a security boundary: the remote requires GPG-signed commits.
+
+msg_file=$1
+
+fail () {
+	echo "commit-msg: $1" >&2
+	echo "commit-msg: see AGENTS.md, section 'Commit rules'" >&2
+	exit 1
+}
+
+if ! git interpret-trailers --parse "$msg_file" | grep -qi '^Co-authored-by: .\+ <.\+@.\+>$'; then
+	fail "missing or malformed Co-authored-by trailer"
+fi
+
+signoff=$(git interpret-trailers --parse "$msg_file" | sed -n 's/^Signed-off-by: .*<\(.\+\)>$/\1/ip')
+if [ -z "$signoff" ]; then
+	fail "missing or malformed Signed-off-by trailer"
+fi
+
+committer=$(git var GIT_COMMITTER_IDENT | sed -n 's/.*<\(.*\)>.*/\1/p')
+if [ "$signoff" != "$committer" ]; then
+	fail "Signed-off-by address '$signoff' does not match committer '$committer'"
+fi
+
+exit 0

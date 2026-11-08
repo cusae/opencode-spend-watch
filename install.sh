@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Install the OpenCode spend watcher: config file, validation, cron entry.
+set -euo pipefail
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG="$DIR/config.env"
+PYTHON="$(command -v python3)"
+
+cd "$DIR"
+
+if [[ ! -f "$CONFIG" ]]; then
+  cp "$DIR/config.example.env" "$CONFIG"
+  chmod 600 "$CONFIG"
+  echo "Created $CONFIG"
+  echo "Edit it and set MATTERMOST_WEBHOOK_URL before continuing."
+  exit 0
+fi
+chmod 600 "$CONFIG"
+
+set -a
+# shellcheck disable=SC1090
+source "$CONFIG"
+set +a
+: "${STATE_DIR:=$HOME/.local/state/opencode-spend-watch}"
+STATE_DIR="${STATE_DIR/#\~/$HOME}"
+mkdir -p "$STATE_DIR"
+
+if [[ -z "${MATTERMOST_WEBHOOK_URL:-}" ]]; then
+  echo "MATTERMOST_WEBHOOK_URL is empty in $CONFIG" >&2
+  exit 1
+fi
+
+echo "Checking APIs..."
+"$PYTHON" "$DIR/watch.py" check
+
+echo "Sending one test message to Mattermost..."
+"$PYTHON" "$DIR/watch.py" test-webhook
+
+LINE="*/5 * * * * cd \"$DIR\" && /usr/bin/flock -n \"$STATE_DIR/cron.lock\" \"$PYTHON\" watch.py poll >> \"$STATE_DIR/cron.log\" 2>&1"
+MARKER="# opencode-spend-watch"
+CURRENT="$(crontab -l 2>/dev/null || true)"
+FILTERED="$(printf '%s\n' "$CURRENT" | grep -vF "$MARKER" | grep -vF 'watch.py poll' || true)"
+{
+  printf '%s\n' "$FILTERED" | sed '/^$/d'
+  printf '%s\n' "$MARKER"
+  printf '%s\n' "$LINE"
+} | crontab -
+
+echo "Installed cron entry (every 5 minutes)."
+echo "First run: $PYTHON $DIR/watch.py poll"
+echo "Logs:      $STATE_DIR/cron.log"

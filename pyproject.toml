@@ -1,0 +1,18 @@
+[project]
+name = "opencode-spend-watch"
+version = "1.0.0"
+description = "Mattermost alerts for OpenCode usage in dollars"
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
