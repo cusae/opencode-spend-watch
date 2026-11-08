@@ -65,6 +65,20 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(config.limits(), {})
             self.assertEqual(config.labels(), {})
 
+    def test_rejects_a_non_numeric_threshold(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.env"
+            path.write_text("THRESHOLD_STEP_USD=lots\n", encoding="utf-8")
+            with self.assertRaisesRegex(watch.ConfigError, "must be a number"):
+                watch.Config(path)
+
+    def test_rejects_a_non_positive_threshold(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.env"
+            path.write_text("THRESHOLD_STEP_USD=0\n", encoding="utf-8")
+            with self.assertRaisesRegex(watch.ConfigError, "greater than zero"):
+                watch.Config(path)
+
 
 class DateTests(unittest.TestCase):
     def test_parse_iso_accepts_zulu_and_naive_values(self):

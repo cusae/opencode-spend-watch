@@ -4,7 +4,7 @@ import sqlite3
 import tempfile
 import unittest
 import urllib.error
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -154,6 +154,10 @@ class DeliveryTests(unittest.TestCase):
                 watch.post_webhook("https://example.invalid/hook", "hello", attempts=1)
             )
 
+    def test_post_webhook_rejects_a_non_http_url(self):
+        self.assertFalse(watch.post_webhook("file:///tmp/hook", "hello", attempts=1))
+        self.assertFalse(watch.post_webhook("not-a-url", "hello", attempts=1))
+
 
 class CommandTests(unittest.TestCase):
     def setUp(self):
@@ -218,6 +222,13 @@ class CommandTests(unittest.TestCase):
         ):
             self.assertEqual(watch.test_webhook(self.config), 0)
 
+    def test_test_webhook_reports_a_failure(self):
+        with (
+            mock.patch.object(watch, "post_webhook", return_value=False),
+            redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(watch.test_webhook(self.config), 1)
+
     def test_report_prints_the_current_status(self):
         with (
             mock.patch.object(watch, "collect", return_value=self.stats),
@@ -225,6 +236,21 @@ class CommandTests(unittest.TestCase):
         ):
             self.assertEqual(watch.report(self.config), 0)
         self.assertIn("current status", output.getvalue())
+
+    def test_check_reports_a_missing_key(self):
+        with (
+            mock.patch.object(watch, "opencode_go_key", side_effect=RuntimeError("no key")),
+            redirect_stdout(io.StringIO()) as output,
+        ):
+            self.assertEqual(watch.check(self.config), 1)
+        self.assertIn("key: FAIL", output.getvalue())
+
+    def test_report_reports_an_api_failure(self):
+        with (
+            mock.patch.object(watch, "collect", side_effect=RuntimeError("boom")),
+            redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(watch.report(self.config), 1)
 
     def test_main_dispatches_commands(self):
         with mock.patch.dict("os.environ", {"OSW_CONFIG": str(self.dir / "config.env")}):
@@ -238,6 +264,25 @@ class CommandTests(unittest.TestCase):
     def test_main_rejects_an_unknown_command(self):
         with mock.patch.dict("os.environ", {"OSW_CONFIG": str(self.dir / "config.env")}):
             self.assertEqual(watch.main(["watch.py", "bogus"]), 2)
+
+    def test_main_prints_help_and_version(self):
+        with mock.patch.dict("os.environ", {"OSW_CONFIG": str(self.dir / "config.env")}):
+            with redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(watch.main(["watch.py", "--help"]), 0)
+            self.assertIn("usage:", output.getvalue())
+            with redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(watch.main(["watch.py", "--version"]), 0)
+            self.assertIn(watch.VERSION, output.getvalue())
+
+    def test_main_reports_a_configuration_error(self):
+        path = self.dir / "bad.env"
+        path.write_text("THRESHOLD_STEP_USD=zero\n", encoding="utf-8")
+        with (
+            mock.patch.dict("os.environ", {"OSW_CONFIG": str(path)}),
+            redirect_stderr(io.StringIO()) as output,
+        ):
+            self.assertEqual(watch.main(["watch.py", "poll"]), 2)
+        self.assertIn("configuration error", output.getvalue())
 
 
 class MessageBranchTests(unittest.TestCase):

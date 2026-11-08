@@ -31,14 +31,27 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from contextlib import AbstractContextManager
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 API_BASE = "https://opencode.ai"
 USER_AGENT = "opencode-spend-watch/1.0"
+VERSION = "1.0.0"
 MICROCENTS = 100_000_000  # 1 USD = 1e8 microcents
 DEFAULT_CONFIG = Path(__file__).with_name("config.env")
 DEFAULT_LIMITS = Path(__file__).with_name("limits.json")
+
+USAGE = """usage: watch.py [poll|check|report|test-webhook|daemon]
+
+  poll          one collection + alert cycle (use from cron)
+  check         validate key, APIs and configuration
+  report        print current statistics without sending
+  test-webhook  send one test message
+  daemon        poll every OSW_INTERVAL seconds (default 300)
+  --version     print the version
+  --help        print this help"""
 
 
 def log(message: str) -> None:
@@ -65,6 +78,10 @@ def parse_env(path: Path) -> dict[str, str]:
     return values
 
 
+class ConfigError(RuntimeError):
+    """The local configuration file is invalid."""
+
+
 class Config:
     def __init__(self, path: Path):
         env = {**os.environ, **parse_env(path)}
@@ -72,7 +89,13 @@ class Config:
         self.config_path = path
         self.webhook = env.get("MATTERMOST_WEBHOOK_URL", "").strip()
         self.plan = env.get("PLAN", "go-plus").strip()
-        self.step = float(env.get("THRESHOLD_STEP_USD", "1") or "1")
+        raw_step = env.get("THRESHOLD_STEP_USD", "1") or "1"
+        try:
+            self.step = float(raw_step)
+        except ValueError:
+            raise ConfigError(f"THRESHOLD_STEP_USD must be a number, got {raw_step!r}") from None
+        if self.step <= 0:
+            raise ConfigError("THRESHOLD_STEP_USD must be greater than zero")
         self.state_dir = Path(
             env.get("STATE_DIR", str(home / ".local/state/opencode-spend-watch"))
         ).expanduser()
@@ -143,7 +166,7 @@ def opencode_go_key(config: Config) -> str:
 # --------------------------------------------------------------------------- api
 
 
-def api_json(path: str, key: str, timeout: int = 25):
+def api_json(path: str, key: str, timeout: int = 25) -> Any:
     url = f"{API_BASE}{path}"
     request = urllib.request.Request(
         url,
@@ -161,7 +184,7 @@ def api_json(path: str, key: str, timeout: int = 25):
         raise RuntimeError(f"{path} -> HTTP {exc.code}: {body}") from None
 
 
-def fetch_windows(key: str) -> dict:
+def fetch_windows(key: str) -> dict[str, dict[str, Any]]:
     body = api_json("/zen/go/v1/usage", key)
     usage = body.get("usage", {}) if isinstance(body, dict) else {}
     windows = {}
@@ -188,8 +211,8 @@ def fetch_daily(key: str) -> dict[str, float]:
     return days
 
 
-def fetch_models(key: str) -> list[dict]:
-    items: list[dict] = []
+def fetch_models(key: str) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
     page = 1
     while page <= 5:
         body = api_json(f"/console/api/usage/models?range=30d&page={page}&pageSize=50", key)
@@ -215,7 +238,7 @@ def fetch_models(key: str) -> list[dict]:
     return items
 
 
-def parse_iso(value) -> datetime | None:
+def parse_iso(value: object) -> datetime | None:
     if not isinstance(value, str) or not value:
         return None
     text = value.strip()
@@ -241,7 +264,7 @@ def subtract_month(moment: datetime) -> datetime:
 # --------------------------------------------------------------------------- stats
 
 
-def collect(config: Config, stored_days: dict[str, float]) -> dict:
+def collect(config: Config, stored_days: dict[str, float]) -> dict[str, Any]:
     key = opencode_go_key(config)
     windows = fetch_windows(key)
     fresh_days = fetch_daily(key)
@@ -310,7 +333,7 @@ def format_percent(value: float | None) -> str:
 
 
 def build_message(
-    stats: dict,
+    stats: dict[str, Any],
     crossed_from: float | None,
     crossed_to: float | None,
     config: Config,
@@ -398,6 +421,10 @@ def build_message(
 
 
 def post_webhook(url: str, text: str, attempts: int = 3) -> bool:
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        log("MATTERMOST_WEBHOOK_URL must be an http(s) URL")
+        return False
     payload = json.dumps(
         {
             "text": text,
@@ -434,28 +461,31 @@ class Store:
         self.state_path = self.dir / "state.json"
         self.lock_path = self.dir / "state.lock"
 
-    def locked(self):
+    def locked(self) -> AbstractContextManager[Store]:
         store = self
 
         class _Lock:
-            def __enter__(self):
+            handle: Any
+
+            def __enter__(self) -> Store:
                 self.handle = open(store.lock_path, "w")
                 fcntl.flock(self.handle, fcntl.LOCK_EX)
                 return store
 
-            def __exit__(self, *exc):
+            def __exit__(self, *exc: object) -> None:
                 fcntl.flock(self.handle, fcntl.LOCK_UN)
                 self.handle.close()
 
         return _Lock()
 
-    def load(self) -> dict:
+    def load(self) -> dict[str, Any]:
         try:
-            return json.loads(self.state_path.read_text(encoding="utf-8"))
+            value = json.loads(self.state_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return {}
+        return value if isinstance(value, dict) else {}
 
-    def save(self, state: dict) -> None:
+    def save(self, state: dict[str, Any]) -> None:
         tmp = self.state_path.with_suffix(".tmp")
         tmp.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
         os.replace(tmp, self.state_path)
@@ -558,7 +588,11 @@ def report(config: Config) -> int:
 
 
 def check(config: Config) -> int:
-    key = opencode_go_key(config)
+    try:
+        key = opencode_go_key(config)
+    except RuntimeError as exc:
+        print(f"key: FAIL {exc}")
+        return 1
     print(f"key: found (len {len(key)})")
     try:
         windows = fetch_windows(key)
@@ -593,8 +627,19 @@ def test_webhook(config: Config) -> int:
 
 def main(argv: list[str]) -> int:
     command = argv[1] if len(argv) > 1 else "poll"
+    if command in ("-h", "--help", "help"):
+        print(USAGE)
+        return 0
+    if command in ("-V", "--version", "version"):
+        print(f"opencode-spend-watch {VERSION}")
+        return 0
+
     config_path = Path(os.environ.get("OSW_CONFIG", DEFAULT_CONFIG)).expanduser()
-    config = Config(config_path)
+    try:
+        config = Config(config_path)
+    except ConfigError as exc:
+        print(f"configuration error: {exc}", file=sys.stderr)
+        return 2
 
     if command == "poll":
         return poll(config)
@@ -609,15 +654,7 @@ def main(argv: list[str]) -> int:
         while True:
             poll(config)
             time.sleep(interval)
-    print(
-        "usage: watch.py [poll|check|report|test-webhook|daemon]\n"
-        "  poll          one collection + alert cycle (use from cron)\n"
-        "  check         validate key, APIs and configuration\n"
-        "  report        print current statistics without sending\n"
-        "  test-webhook  send one test message\n"
-        "  daemon        poll every OSW_INTERVAL seconds (default 300)",
-        file=sys.stderr,
-    )
+    print(USAGE, file=sys.stderr)
     return 2
 
 
