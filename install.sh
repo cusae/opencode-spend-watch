@@ -36,7 +36,18 @@ echo "Checking APIs..."
 echo "Sending one test message to Mattermost..."
 "$PYTHON" "$DIR/watch.py" test-webhook
 
-LINE="*/5 * * * * cd \"$DIR\" && /usr/bin/flock -n \"$STATE_DIR/cron.lock\" \"$PYTHON\" watch.py poll >> \"$STATE_DIR/cron.log\" 2>&1"
+INTERVAL="${CRON_INTERVAL_MINUTES:-15}"
+if ! [[ "$INTERVAL" =~ ^[0-9]+$ ]]; then
+  echo "CRON_INTERVAL_MINUTES must be an integer, got '$INTERVAL'" >&2
+  exit 1
+fi
+INTERVAL=$((10#$INTERVAL))
+if (( INTERVAL < 1 || INTERVAL > 59 )); then
+  echo "CRON_INTERVAL_MINUTES must be between 1 and 59, got $INTERVAL" >&2
+  exit 1
+fi
+
+LINE="*/$INTERVAL * * * * cd \"$DIR\" && /usr/bin/flock -n \"$STATE_DIR/cron.lock\" \"$PYTHON\" watch.py poll >> \"$STATE_DIR/cron.log\" 2>&1"
 MARKER="# opencode-spend-watch"
 CURRENT="$(crontab -l 2>/dev/null || true)"
 FILTERED="$(printf '%s\n' "$CURRENT" | grep -vF "$MARKER" | grep -vF 'watch.py poll' || true)"
@@ -46,6 +57,6 @@ FILTERED="$(printf '%s\n' "$CURRENT" | grep -vF "$MARKER" | grep -vF 'watch.py p
   printf '%s\n' "$LINE"
 } | crontab -
 
-echo "Installed cron entry (every 5 minutes)."
+echo "Installed cron entry (every $INTERVAL minutes)."
 echo "First run: $PYTHON $DIR/watch.py poll"
 echo "Logs:      $STATE_DIR/cron.log"

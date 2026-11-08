@@ -17,11 +17,13 @@ All notable changes to this project are documented here. The format follows
 - `--version` and `--help` on the CLI, with explicit exit codes.
 - Configuration validation: a non-numeric or non-positive threshold is a
   configuration error, not a traceback.
+- `CRON_INTERVAL_MINUTES` for `install.sh`; the default is 15 minutes.
 
 ### Changed
 
 - `mypy` now runs in strict mode.
 - The coverage gate is 90%, up from 75%.
+- `install.sh` validates the cron interval as an integer from 1 to 59.
 
 ### Security
 

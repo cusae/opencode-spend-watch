@@ -13,6 +13,77 @@ teardown() {
 	rm -rf "$TMPDIR_TEST"
 }
 
+stub_tools() {
+	mkdir -p bin
+	cat >bin/python3 <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+	cat >bin/crontab <<'EOF'
+#!/bin/sh
+if [ "$1" = "-l" ]; then
+  exit 1
+fi
+cat >"$CRONTAB_OUT"
+EOF
+	chmod +x bin/python3 bin/crontab
+	export PATH="$TMPDIR_TEST/bin:$PATH"
+	export CRONTAB_OUT="$TMPDIR_TEST/cron.out"
+}
+
+write_config() {
+	{
+		echo 'MATTERMOST_WEBHOOK_URL="https://example.invalid/hook"'
+		echo "STATE_DIR=$TMPDIR_TEST/state"
+		if [[ -n "${1:-}" ]]; then
+			echo "CRON_INTERVAL_MINUTES=$1"
+		fi
+	} >config.env
+	chmod 600 config.env
+}
+
+@test "uses a 15 minute interval by default" {
+	stub_tools
+	write_config
+	run ./install.sh
+	[ "$status" -eq 0 ]
+	grep -q '^\*/15 \* \* \* \*' "$CRONTAB_OUT"
+}
+
+@test "accepts a custom cron interval" {
+	stub_tools
+	write_config 7
+	run ./install.sh
+	[ "$status" -eq 0 ]
+	grep -q '^\*/7 \* \* \* \*' "$CRONTAB_OUT"
+}
+
+@test "accepts a zero-padded cron interval" {
+	stub_tools
+	write_config 05
+	run ./install.sh
+	[ "$status" -eq 0 ]
+	grep -q '^\*/5 \* \* \* \*' "$CRONTAB_OUT"
+}
+
+@test "rejects a cron interval outside 1-59" {
+	stub_tools
+	write_config 60
+	run ./install.sh
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"between 1 and 59"* ]]
+	[ ! -e "$CRONTAB_OUT" ]
+}
+
+@test "rejects a non-numeric cron interval" {
+	stub_tools
+	write_config often
+	run ./install.sh
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"must be an integer"* ]]
+	[ ! -e "$CRONTAB_OUT" ]
+}
+
 @test "creates config.env with mode 600 on first run" {
 	run ./install.sh
 	[ "$status" -eq 0 ]
