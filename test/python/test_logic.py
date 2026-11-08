@@ -164,6 +164,38 @@ class PollTests(unittest.TestCase):
         self.assertEqual(self.state()["last_level"], 0)
         watch.collect = orig
 
+    def test_missing_webhook_exits_two(self):
+        self.config.webhook = ""
+        self.assertEqual(self.run_poll(), 2)
+        self.assertFalse((self.dir / "state.json").exists())
+
+    def test_collection_failure_exits_one(self):
+        def explode(config, stored):
+            raise RuntimeError("api down")
+
+        watch.collect = explode
+        self.assertEqual(self.run_poll(), 1)
+        self.assertFalse((self.dir / "state.json").exists())
+
+    def test_startup_delivery_failure_exits_one(self):
+        self.post_ok = False
+        self.assertEqual(self.run_poll(), 1)
+        self.assertFalse((self.dir / "state.json").exists())
+
+    def test_reset_delivery_failure_exits_one(self):
+        self.run_poll()
+        self.assertEqual(self.state()["last_level"], 5)
+
+        orig = watch.collect
+        watch.collect = lambda config, stored: (
+            make_stats(0.0, end_day=27)
+            | {"period_end": datetime(2026, 12, 27, 14, 9, 59, tzinfo=timezone.utc)}
+        )
+        self.post_ok = False
+        self.assertEqual(self.run_poll(), 1)
+        self.assertEqual(self.state()["last_level"], 5)
+        watch.collect = orig
+
 
 class MessageTests(unittest.TestCase):
     def test_message_contains_dollars_and_remaining(self):
