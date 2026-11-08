@@ -1,7 +1,10 @@
 __pycache__/
 *.py[cod]
 .ruff_cache/
+.mypy_cache/
+.pytest_cache/
 .venv/
+node_modules/
 config.env
 state/
 *.log
