@@ -37,7 +37,7 @@ $ $EDITOR config.env          # set MATTERMOST_WEBHOOK_URL
 $ python3 watch.py check
 $ python3 watch.py report
 $ python3 watch.py poll
-$ ./install.sh                # installs the 5-minute cron job
+$ ./install.sh                # installs the cron job (default: 15 min)
 ```
 
 `poll` is the cron entry point. `check` validates the key and every API used.

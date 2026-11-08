@@ -136,7 +136,7 @@ Closest limit: **DeepSeek V4.1 Flash** — $196.14 left of $200.00 (98%)
    $ python3 watch.py test-webhook
    ```
 
-5. Install the five-minute cron job:
+5. Install the cron job (default: every 15 minutes):
 
    ```console
    $ ./install.sh
@@ -154,6 +154,7 @@ by `# opencode-spend-watch`.
 | `MATTERMOST_WEBHOOK_URL` | empty | Required. Channel is fixed by the webhook. |
 | `PLAN` | `go-plus` | `go-plus` or `go`; selects limits from `limits.json`. |
 | `THRESHOLD_STEP_USD` | `1` | Alert step in dollars; must be positive. |
+| `CRON_INTERVAL_MINUTES` | `15` | Minutes between cron checks (1–59). |
 | `STATE_DIR` | `~/.local/state/opencode-spend-watch` | State, lock, cron log. |
 | `OPENCODE_DB` | `~/.local/share/opencode/opencode.db` | Key source. |
 | `OPENCODE_GO_KEY` | unset | Optional key override. |

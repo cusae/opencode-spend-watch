@@ -31,7 +31,7 @@ sequenceDiagram
     participant Console as OpenCode Console API
     participant MM as Mattermost
 
-    Cron->>Watch: every 5 minutes
+    Cron->>Watch: every configured interval
     Watch->>State: lock, load daily history
     Watch->>Console: GET /zen/go/v1/usage
     Watch->>Console: GET /console/api/usage/cost-by-day?range=30d

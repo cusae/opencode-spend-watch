@@ -24,10 +24,11 @@
    ```
 
 `install.sh` validates the APIs, sends one test message, and installs this
-cron entry:
+cron entry. The default is every 15 minutes; set `CRON_INTERVAL_MINUTES` in
+`config.env` to change it (1–59):
 
 ```text
-*/5 * * * * cd "<repo>" && /usr/bin/flock -n "<state>/cron.lock" \
+*/15 * * * * cd "<repo>" && /usr/bin/flock -n "<state>/cron.lock" \
   /usr/bin/python3 watch.py poll >> "<state>/cron.log" 2>&1
 ```
 
