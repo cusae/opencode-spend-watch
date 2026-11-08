@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
-HERE = Path(__file__).resolve().parent.parent
+HERE = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("osw", HERE / "watch.py")
 watch = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(watch)

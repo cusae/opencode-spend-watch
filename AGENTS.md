@@ -50,14 +50,20 @@ keeps earlier days after they leave the API's 30-day window.
 
 ## Tests
 
-The suite is stdlib `unittest` and must not touch the network. Tests monkeypatch
-`collect` and `post_webhook`. Required checks, all failures fatal:
+The suite is split in two: stdlib `unittest` for Python and `bats` for the
+shell. Python tests must not touch the network; they monkeypatch `collect` and
+`post_webhook`. Bats covers `install.sh` in a sandbox and the commit hook in a
+throwaway repository. Required checks, all failures fatal:
 
 ```console
-$ python3 -m unittest discover -s tests -v
 $ ruff check .
-$ shellcheck install.sh .githooks/commit-msg
+$ ruff format --check .
+$ mypy watch.py
 $ python3 -m py_compile watch.py
+$ coverage run -m unittest discover -s test/python -t . -v
+$ coverage report
+$ bats test/shell
+$ shellcheck install.sh .githooks/commit-msg
 ```
 
 GitHub Actions runs the same checks on every push to `master` and on every pull

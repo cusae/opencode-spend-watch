@@ -125,23 +125,29 @@ Cron runs every five minutes and writes to
 - OpenCode with the OpenCode Go integration connected
 - A Mattermost Incoming Webhook
 
-No `pip install` is needed to run the watcher. Development checks use `ruff`
-and `shellcheck`.
+No `pip install` is needed to run the watcher. Development checks use `ruff`,
+`mypy`, `coverage`, `bats`, and `shellcheck`.
 
 ---
 
 ## Tests
 
 ```console
-$ python3 -m unittest discover -s tests -v
 $ ruff check .
-$ shellcheck install.sh .githooks/commit-msg
+$ ruff format --check .
+$ mypy watch.py
 $ python3 -m py_compile watch.py
+$ coverage run -m unittest discover -s test/python -t . -v
+$ coverage report
+$ bats test/shell
+$ shellcheck install.sh .githooks/commit-msg
 ```
 
-The unit tests never touch the network: they monkeypatch collection and
+The Python tests never touch the network: they monkeypatch collection and
 delivery to cover initialization, single and multiple threshold crossings,
-failed webhook delivery, and billing-period resets. GitHub Actions runs the
+failed webhook delivery, billing-period resets, configuration parsing, date
+arithmetic, and message rendering. The bats suite covers `install.sh` in a
+sandbox and the commit hook in a throwaway repository. GitHub Actions runs the
 same commands on every push to `master` and every pull request, in
 [`.github/workflows/tests.yml`](.github/workflows/tests.yml).
 

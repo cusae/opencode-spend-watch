@@ -8,9 +8,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   python:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
 
@@ -19,7 +24,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install the checks
-        run: pip install ruff
+        run: pip install ruff mypy coverage
 
       - name: Lint
         run: ruff check .
@@ -27,19 +32,40 @@ jobs:
       - name: Check formatting
         run: ruff format --check .
 
+      - name: Type check
+        run: mypy watch.py
+
       - name: Compile
         run: python -m py_compile watch.py
 
-      - name: Run the test suite
-        run: python -m unittest discover -s tests -v
+      - name: Run the Python tests
+        run: coverage run -m unittest discover -s test/python -t . -v
+
+      - name: Report coverage
+        run: coverage report
 
       - name: Ensure no local config is committed
         run: |
           test ! -e config.env
           test ! -e state
 
+  bats:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install the shell tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bats shellcheck
+
+      - name: Run the shell tests
+        run: bats test/shell
+
   shell:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
 
