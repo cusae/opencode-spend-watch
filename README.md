@@ -2,12 +2,13 @@
 
 # opencode-spend-watch
 
-**Know what OpenCode costs, one dollar at a time.**
+**Dollar-by-dollar Mattermost alerts for OpenCode usage.**
 
 <br>
 
 [![tests](https://github.com/cusae/opencode-spend-watch/actions/workflows/tests.yml/badge.svg)](https://github.com/cusae/opencode-spend-watch/actions/workflows/tests.yml)
-[![license](https://img.shields.io/github/license/alaunay/opencode-spend-watch?style=flat-square)](LICENSE)
+[![codeql](https://github.com/cusae/opencode-spend-watch/actions/workflows/codeql.yml/badge.svg)](https://github.com/cusae/opencode-spend-watch/actions/workflows/codeql.yml)
+[![license](https://img.shields.io/github/license/cusae/opencode-spend-watch?style=flat-square)](LICENSE)
 [![python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab?style=flat-square&logo=python&logoColor=white)](#requirements)
 
 <br>
@@ -15,14 +16,30 @@
 
 </div>
 
-A small Python watcher that reads exact OpenCode usage in USD, and posts a
-Mattermost message every time your spend crosses another whole dollar in the
-current billing period. The message carries the amount used, the remaining
-monthly allowance, the 5-hour/weekly/monthly window percentages, today's
-spend, the top models, and the limit with the least headroom.
+A small Python watcher that reads exact OpenCode usage in USD and posts a
+Mattermost message every time spend in the current billing period crosses
+another whole dollar. It reports the amount used, the remaining monthly
+allowance, the 5-hour, weekly, and monthly windows, today's spend, the top
+models, and the limit with the least headroom.
 
-No database of its own beyond a JSON state file, no third-party runtime
-dependency, no secret in the repository.
+Standard library only. No database. No secret in the repository.
+
+---
+
+## Features
+
+- **Exact dollars.** Spend comes from the OpenCode Console, not from a local
+  price table.
+- **One alert per dollar.** A delivery failure is retried; a threshold is never
+  skipped or duplicated.
+- **Durable history.** Daily costs survive after they leave the API's 30-day
+  window, so every billing period stays complete.
+- **Full context.** Remaining allowance, window percentages and reset times,
+  today and last-7-day spend, top models, closest per-model limit, console
+  link.
+- **Safe by default.** The OpenCode key is read read-only and never logged,
+  printed, or sent. `config.env` is git-ignored and mode 600.
+- **Cron-sized.** One process, one state file, one file lock, stdlib only.
 
 ---
 
@@ -39,83 +56,54 @@ $ python3 watch.py test-webhook
 $ ./install.sh
 ```
 
+The first poll sends a startup message and takes the current spend as the
+baseline. Alerts start at the next dollar.
+
 ---
 
-## Where the numbers come from
+## How it works
 
-The watcher uses the OpenCode Go key already stored locally by OpenCode in
-`~/.local/share/opencode/opencode.db` (table `credential`, integration
-`opencode-go`). The key is read read-only, never printed, never logged, and
-never placed in a message.
+```mermaid
+flowchart LR
+    Cron --> Watch[watch.py poll]
+    Watch --> Usage[OpenCode usage API]
+    Watch --> Costs[OpenCode cost API]
+    Watch --> State[(state.json)]
+    Watch -->|threshold crossed| Mattermost
+```
+
+The watcher reads three undocumented OpenCode Console endpoints with the Go
+key already stored locally:
 
 | Endpoint | Data |
 | --- | --- |
-| `/zen/go/v1/usage` | 5-hour, weekly and monthly percentages, plus reset times |
+| `/zen/go/v1/usage` | 5-hour, weekly, monthly percentages and reset times |
 | `/console/api/usage/cost-by-day?range=30d` | exact cost per UTC day |
 | `/console/api/usage/models?range=30d` | exact cost per model |
 
-All three are OpenCode Console endpoints, not a documented public API. They
-can change without notice; `watch.py check` names the failing endpoint.
+The billing period comes from the monthly `resetsAt` timestamp. Spend is the
+sum of daily costs from the period start. The threshold level is
+`floor(spend / step)`; a message is sent when that level increases.
 
----
+See [docs/architecture.md](docs/architecture.md) for the data flow, state
+schema, failure model, and API contract.
 
-## How thresholds work
+### Message format
 
-The billing period comes from the API's monthly `resetsAt` timestamp, not the
-calendar month. For example, 27 Oct 14:09 UTC to 27 Nov 14:09 UTC.
+```text
+**OpenCode spend — threshold reached**
+**$6.05** used this period (crossed $6.00).
 
-- Spend is the sum of daily costs from the period start to now.
-- The threshold level is `floor(spend / THRESHOLD_STEP_USD)`.
-- A message is sent when that level increases.
-- If several dollars are crossed between polls, one message reports the range.
-- If Mattermost rejects the message, the level is not advanced; the next poll
-  retries, so an alert is never lost.
+Billing period: 27 Oct 2026 14:09 UTC → 27 Nov 2026 14:09 UTC
+Monthly allowance: **4% used**, 96% left
+Windows: 5-hour 0% · weekly 6% · monthly 4%
 
-Daily costs are merged into `state.json`, so days that leave the API's 30-day
-window remain available for the rest of the period and for later periods.
+Today (UTC): **$1.63** · last 7 days: **$3.70**
+Top models (30d): DeepSeek V4.1 Flash $3.86 · Claude Haiku 5.5 $0.69
+Closest limit: **DeepSeek V4.1 Flash** — $196.14 left of $200.00 (98%)
 
-The first run sends one "watcher started" message and takes the current spend
-as the baseline. It does not replay past dollars.
-
----
-
-## Configuration
-
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `MATTERMOST_WEBHOOK_URL` | empty | Required. Incoming webhook, channel fixed by it. |
-| `PLAN` | `go-plus` | `go-plus` or `go`; selects limits from `limits.json`. |
-| `THRESHOLD_STEP_USD` | `1` | Alert step in dollars. |
-| `STATE_DIR` | `~/.local/state/opencode-spend-watch` | State, lock, cron log. |
-| `OPENCODE_DB` | `~/.local/share/opencode/opencode.db` | Key source. |
-| `OPENCODE_GO_KEY` | unset | Optional key override. |
-| `CONSOLE_URL` | empty | Link added to each message. |
-| `STARTUP_MESSAGE` | `true` | Send the first-run message. |
-| `RESET_MESSAGE` | `true` | Send a message when the period resets. |
-| `LIMITS_FILE` | `limits.json` | Per-model monthly limits. |
-
-`CONSOLE_URL` is optional. A typical value is the activity overview of your
-OpenCode workspace:
-
+[Open the console](https://opencode.ai/console/<org-id>/activity/overview?range=30d)
 ```
-https://opencode.ai/console/<org-id>/activity/overview?range=30d
-```
-
----
-
-## Commands
-
-```console
-$ python3 watch.py poll          # one cycle; cron calls this
-$ python3 watch.py check         # validate key, APIs, webhook, plan limits
-$ python3 watch.py report        # print the alert without sending
-$ python3 watch.py test-webhook  # one test message
-$ python3 watch.py daemon        # poll every OSW_INTERVAL seconds
-$ ./install.sh                   # validate, test webhook, install cron
-```
-
-Cron runs every five minutes and writes to
-`~/.local/state/opencode-spend-watch/cron.log`.
 
 ---
 
@@ -124,58 +112,144 @@ Cron runs every five minutes and writes to
 - Python 3.10 or later, standard library only
 - OpenCode with the OpenCode Go integration connected
 - A Mattermost Incoming Webhook
-
-No `pip install` is needed to run the watcher. Development checks use `ruff`,
-`mypy`, `coverage`, `bats`, and `shellcheck`.
+- Linux or macOS for cron; systemd timers work too
 
 ---
 
-## Tests
+## Installation
 
-```console
-$ ruff check .
-$ ruff format --check .
-$ mypy watch.py
-$ python3 -m py_compile watch.py
-$ coverage run -m unittest discover -s test/python -t . -v
-$ coverage report
-$ bats test/shell
-$ shellcheck install.sh .githooks/commit-msg
-```
+1. Create an Incoming Webhook in Mattermost:
+   **Integrations > Incoming Webhooks > Add**, and choose the channel.
+2. Create the configuration:
 
-The Python tests never touch the network: they monkeypatch collection and
-delivery to cover initialization, single and multiple threshold crossings,
-failed webhook delivery, billing-period resets, configuration parsing, date
-arithmetic, and message rendering. The bats suite covers `install.sh` in a
-sandbox and the commit hook in a throwaway repository. GitHub Actions runs the
-same commands on every push to `master` and every pull request, in
-[`.github/workflows/tests.yml`](.github/workflows/tests.yml).
+   ```console
+   $ cp config.example.env config.env
+   $ chmod 600 config.env
+   ```
+
+3. Set `MATTERMOST_WEBHOOK_URL`. Keep the value quoted if it contains `&`,
+   `?`, or `#`.
+4. Validate the key, APIs, and webhook:
+
+   ```console
+   $ python3 watch.py check
+   $ python3 watch.py test-webhook
+   ```
+
+5. Install the five-minute cron job:
+
+   ```console
+   $ ./install.sh
+   ```
+
+`install.sh` is idempotent. It rewrites only its own crontab entry, identified
+by `# opencode-spend-watch`.
 
 ---
 
-## Limitations
+## Configuration
 
-- The console API exposes at most 30 days of daily costs. The first run seeds
-  history from that window; older usage cannot be recovered.
-- Daily costs are bucketed per UTC day, so the first day of a period can differ
-  slightly from a strict period boundary.
-- The monthly percentage comes from the API. Per-model dollar limits come from
-  the published Go/Go Plus table in `limits.json`; edit the file when OpenCode
-  changes them.
-- This tracks usage counted against your Go allowance, not the flat
-  subscription charge or pay-as-you-go credits outside Go.
-- The API lags a few minutes, so an alert can arrive just after the dollar was
-  actually spent.
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `MATTERMOST_WEBHOOK_URL` | empty | Required. Channel is fixed by the webhook. |
+| `PLAN` | `go-plus` | `go-plus` or `go`; selects limits from `limits.json`. |
+| `THRESHOLD_STEP_USD` | `1` | Alert step in dollars; must be positive. |
+| `STATE_DIR` | `~/.local/state/opencode-spend-watch` | State, lock, cron log. |
+| `OPENCODE_DB` | `~/.local/share/opencode/opencode.db` | Key source. |
+| `OPENCODE_GO_KEY` | unset | Optional key override. |
+| `CONSOLE_URL` | empty | Link added to each message. |
+| `STARTUP_MESSAGE` | `true` | Send the first-run message. |
+| `RESET_MESSAGE` | `true` | Send a message when the period resets. |
+| `LIMITS_FILE` | `limits.json` | Per-model monthly limits. |
+
+The full runbook, including rotation and recovery, is in
+[docs/operations.md](docs/operations.md).
+
+---
+
+## Command line
+
+| Command | Effect |
+| --- | --- |
+| `watch.py poll` | One collection and alert cycle; cron calls this. |
+| `watch.py check` | Validate the key, APIs, webhook, and plan limits. |
+| `watch.py report` | Print the message without sending it. |
+| `watch.py test-webhook` | Send one test message. |
+| `watch.py daemon` | Poll every `OSW_INTERVAL` seconds (default 300). |
+| `watch.py --version` | Print the version. |
+| `watch.py --help` | Print the usage. |
+
+Exit codes: `0` success, `1` API or delivery failure, `2` configuration error
+or missing webhook.
+
+---
+
+## Spend semantics
+
+- The period starts one calendar month before the API's monthly `resetsAt`.
+- Daily costs are UTC buckets; the first day can include a few minutes before
+  the exact start.
+- The first run baselines at the current spend; past dollars are not replayed.
+- If several dollars are crossed between polls, one message reports the range.
+- The console API lags a few minutes, so an alert can arrive just after the
+  dollar was spent.
+- This tracks the Go allowance, not the flat subscription charge or
+  pay-as-you-go credits outside Go.
+
+---
+
+## Troubleshooting
+
+| Symptom | Action |
+| --- | --- |
+| `key: FAIL` | Reconnect OpenCode Go, or set `OPENCODE_GO_KEY`. |
+| `HTTP 401` | The key was rejected; reconnect Go and rerun `check`. |
+| `HTTP 404` | A console endpoint changed; open an issue with the path. |
+| Test message `failed` | Recreate the webhook and update `config.env`. |
+| No alerts | Run `report`; inspect `~/.local/state/opencode-spend-watch/cron.log`. |
+| Cron never runs | Check `systemctl status cron` and `crontab -l`. |
+
+More cases and recovery steps: [docs/operations.md](docs/operations.md).
 
 ---
 
 ## Security
 
-- `config.env` holds only the webhook URL. It is git-ignored and created with
-  mode 600.
+- `config.env` holds only the webhook URL; it is git-ignored and mode 600.
 - The OpenCode key stays in OpenCode's database and is read read-only.
 - No key material appears in logs or Mattermost messages.
+- The webhook URL is validated before every delivery.
 - Never commit `config.env`, a webhook URL, a key, or an org ID.
+
+Report vulnerabilities privately through
+[GitHub Security Advisories](https://github.com/cusae/opencode-spend-watch/security/advisories/new).
+See [SECURITY.md](SECURITY.md).
+
+---
+
+## Development
+
+```console
+$ make setup          # pip install -r requirements-dev.txt
+$ make hooks          # use the repository commit hook
+$ make check          # every check
+```
+
+`make check` runs ruff, shellcheck, yamllint, ruff format, mypy --strict,
+coverage (90% gate), bats, markdownlint, and workflow lint. CI runs the same
+checks, plus a Python 3.10–3.14 matrix, CodeQL, and Dependabot.
+
+| Path | Content |
+| --- | --- |
+| `watch.py` | the watcher |
+| `limits.json` | per-model monthly limits and display names |
+| `install.sh` | validation and cron installation |
+| `test/python/` | unit tests |
+| `test/shell/` | bats tests |
+| `docs/` | architecture and operations |
+
+Contribution rules: [CONTRIBUTING.md](CONTRIBUTING.md) and
+[AGENTS.md](AGENTS.md). Release history: [CHANGELOG.md](CHANGELOG.md).
 
 ---
 

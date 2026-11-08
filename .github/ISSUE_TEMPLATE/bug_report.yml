@@ -1,0 +1,77 @@
+name: Bug report
+description: Report a reproducible defect in the watcher or its checks.
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste a Mattermost webhook URL, an OpenCode key, or a state
+        file. Redact tokens and org IDs from logs.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: The observed behaviour, including the exit code if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run `python3 watch.py check`
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `python3 watch.py --version`.
+      placeholder: opencode-spend-watch 1.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: plan
+    attributes:
+      label: OpenCode plan
+      options:
+        - Go Plus
+        - Go
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Redact secrets. The cron log is in the state directory.
+      render: shell
+    validations:
+      required: false
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Checklist
+      options:
+        - label: I removed every webhook URL, key, and org ID from this report.
+          required: true
+        - label: I ran `python3 watch.py check`.
+          required: true

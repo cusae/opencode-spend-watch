@@ -14,6 +14,20 @@ The OpenCode Go key is read from OpenCode's own database
 (`~/.local/share/opencode/opencode.db`, table `credential`, integration
 `opencode-go`). No secret is stored in this repository.
 
+## Repository layout
+
+| Path | Content |
+| --- | --- |
+| `watch.py` | the watcher, CLI, API clients, state, delivery |
+| `limits.json` | per-model monthly limits and display labels |
+| `install.sh` | validation, test message, cron installation |
+| `config.example.env` | empty template; `config.env` is local and ignored |
+| `test/python/` | stdlib `unittest` suite |
+| `test/shell/` | `bats` suite for `install.sh` and the commit hook |
+| `docs/architecture.md` | data flow, state schema, API contract, failure model |
+| `docs/operations.md` | install, runbook, rotation, recovery, uninstall |
+| `Makefile` | setup, lint, types, tests, coverage, docs, `check` |
+
 ## Run
 
 ```console
@@ -28,7 +42,7 @@ $ ./install.sh                # installs the 5-minute cron job
 
 `poll` is the cron entry point. `check` validates the key and every API used.
 `report` prints the message without sending it. `test-webhook` sends one test
-message.
+message. `--version` and `--help` complete the CLI.
 
 ## Data sources
 
@@ -48,26 +62,42 @@ non-zero without advancing alert state, so the next poll retries.
 Daily costs are persisted in `state.json`. Do not drop that merge: it is what
 keeps earlier days after they leave the API's 30-day window.
 
-## Tests
+## Quality gates
 
-The suite is split in two: stdlib `unittest` for Python and `bats` for the
-shell. Python tests must not touch the network; they monkeypatch `collect` and
-`post_webhook`. Bats covers `install.sh` in a sandbox and the commit hook in a
-throwaway repository. Required checks, all failures fatal:
+Run `make check` before every commit. It runs:
 
 ```console
 $ ruff check .
 $ ruff format --check .
-$ mypy watch.py
+$ mypy watch.py                 # strict mode, configured in pyproject.toml
 $ python3 -m py_compile watch.py
 $ coverage run -m unittest discover -s test/python -t . -v
-$ coverage report
+$ coverage report               # 90% minimum
 $ bats test/shell
 $ shellcheck install.sh .githooks/commit-msg
+$ yamllint -c .yamllint.yml .github
+$ markdownlint-cli2
 ```
 
-GitHub Actions runs the same checks on every push to `master` and on every pull
-request, in `.github/workflows/tests.yml`.
+Python tests must not touch the network; they monkeypatch `collect`, `fetch_*`,
+and `post_webhook`. Bats covers `install.sh` in a sandbox and the commit hook in
+a throwaway repository. Any finding, at any severity, is a failure.
+
+CI runs the same checks in `.github/workflows/tests.yml` across Python 3.10 to
+3.14, plus CodeQL in `.github/workflows/codeql.yml`. Dependabot updates the
+actions and the pinned development tools. A change is not ready while any
+required check is red.
+
+## Documentation
+
+- `README.md` is the user entry point: install, configuration, CLI, semantics.
+- `docs/architecture.md` explains the design and the API contract.
+- `docs/operations.md` is the runbook: logs, failure modes, rotation, reset.
+- `CONTRIBUTING.md` covers setup, checks, commits, and pull requests.
+- `SECURITY.md` covers reporting and the threat model.
+
+When behaviour changes, update the README and the relevant document in the same
+pull request. Keep `CHANGELOG.md` current under `[Unreleased]`.
 
 ## Configuration and secrets
 
@@ -84,9 +114,12 @@ request, in `.github/workflows/tests.yml`.
 - Python 3.10 or later, standard library only, no third-party runtime
   dependency.
 - Format with `ruff format`; lint with `ruff check .`.
-- Line length 100. Type hints on public functions.
-- Keep `main()` dispatch and the `Store` lock: cron and manual runs can overlap.
-- A failed API or webhook call returns non-zero and leaves state unchanged.
+- Line length 100. Type annotations are mandatory: `mypy --strict watch.py`
+  must pass.
+- Keep `main()` dispatch, the `Store` lock, and the exit codes: cron and manual
+  runs can overlap, and a failed delivery must leave state unchanged.
+- Validate configuration in `Config`; raise `ConfigError` for an invalid
+  threshold. Never let a malformed `config.env` produce a traceback.
 - Comments explain why, not what.
 
 ## Commit rules
@@ -98,13 +131,13 @@ Every commit that contains work produced with an agent must end with a
 
 Format, after a blank line at the end of the commit body:
 
-```
+```text
 Co-authored-by: Name <email>
 ```
 
 Example for an agent running through opencode:
 
-```
+```text
 Co-authored-by: DeepSeek V4.1 Flash <noreply@opencode.ai>
 ```
 
@@ -128,7 +161,7 @@ submit the code under the project licence. It is a hard rule, like the
 Format, at the end of the commit message, after the `Co-authored-by`
 trailer:
 
-```
+```text
 Signed-off-by: Name <email>
 ```
 
@@ -146,7 +179,7 @@ Rules for the trailer:
 
 A complete agent-assisted commit ends with, in this order:
 
-```
+```text
 Co-authored-by: Name <email>
 Signed-off-by: Name <email>
 ```
