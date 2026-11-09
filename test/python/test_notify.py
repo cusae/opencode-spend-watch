@@ -1,7 +1,9 @@
 import json
 import ssl
+import tempfile
 import unittest
 import urllib.error
+from pathlib import Path
 from unittest import mock
 
 import notify
@@ -102,6 +104,38 @@ class ChannelTests(unittest.TestCase):
     def test_text_chunks_prefer_line_boundaries(self):
         chunks = notify._text_chunks("a" * 5 + "\n" + "b" * 5, 6)
         self.assertEqual(chunks, ["a" * 5 + "\n", "b" * 5])
+
+    def test_names_include_rss(self):
+        channels = notify.Channels(rss_feed="/tmp/feed.xml")
+        self.assertEqual(channels.names(), ["rss"])
+
+    def test_rss_feed_appends_and_prunes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            feed = Path(tmp) / "feed.xml"
+            for index in range(3):
+                notify.send_rss(
+                    str(feed),
+                    "OpenCode Spend Alerts",
+                    "https://example.invalid",
+                    f"**Alert {index}**",
+                    max_items=2,
+                )
+            body = feed.read_text()
+            self.assertIn("<rss", body)
+            self.assertIn("Alert 2", body)
+            self.assertNotIn("Alert 0", body)
+            notify.ET.parse(feed)
+
+    def test_rss_feed_rejects_a_corrupt_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            feed = Path(tmp) / "feed.xml"
+            feed.write_text("not xml")
+            with self.assertRaises(notify.DeliveryError):
+                notify.send_rss(str(feed), "title", "", "hello")
+
+    def test_rss_feed_requires_a_positive_limit(self):
+        with self.assertRaises(notify.DeliveryError):
+            notify.send_rss("/tmp/feed.xml", "title", "", "hello", max_items=0)
 
     def test_mattermost_payload(self):
         with mock.patch.object(notify.urllib.request, "urlopen", return_value=response()):

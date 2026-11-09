@@ -4,7 +4,7 @@
 
 1. Create at least one destination: a Mattermost or Slack Incoming Webhook, a
    Discord webhook, an IRC channel, an SMTP account, a WhatsApp Cloud API app,
-   a Telegram bot, or a working desktop notifier. See
+   a Telegram bot, a working desktop notifier, or an RSS feed path. See
    [Notification channels](#notification-channels).
 2. Create the local configuration:
 
@@ -54,6 +54,11 @@ failed.
 | WhatsApp | Set `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TO`, and optionally `WHATSAPP_API_VERSION` (v21.0). Uses the Meta Cloud API. |
 | Telegram | Create a bot with `@BotFather`, set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. Long messages are split at 4000 characters. |
 | Desktop | Set `DESKTOP_NOTIFY=true`. Uses `notify-send` on Linux and `osascript` on macOS; the helper must be on `PATH`. |
+| RSS | Set `RSS_FEED` to a writable `.xml` path. `RSS_MAX_ITEMS` (100) caps the feed, `RSS_TITLE` and `RSS_LINK` customise it. Serve the file from a web server, Nextcloud, or any static host. |
+
+The RSS feed is rewritten atomically after each alert. It contains spend
+amounts and model details, so treat it as internal data and do not publish it
+without authentication.
 
 WhatsApp only accepts free-form text inside the customer service window. An
 alert sent outside that window is rejected by Meta; use a template or another
@@ -106,6 +111,7 @@ The state directory holds:
 | `state.json` | billing periods, checkpoints, daily history, provider state |
 | `state.lock` | poll serialization |
 | `alerts.log` | JSONL delivery audit, rotates at 5 MB |
+| `feed.xml` | optional RSS 2.0 alert feed |
 | `cron.log` | cron output |
 
 Back up `config.env` and `state.json` together. Losing `state.json` resets the
@@ -129,6 +135,7 @@ baseline and the daily history; the next poll reinitializes from the API's
 | Telegram `401` | Invalid bot token | Recreate the bot token with `@BotFather` |
 | Telegram `400 chat not found` | Wrong chat ID, or the bot never received a message | Send `/start` to the bot, then copy the chat ID |
 | Desktop delivery failed | `notify-send` or `osascript` missing | Install `libnotify-bin` or disable `DESKTOP_NOTIFY` |
+| RSS feed failed | Path not writable, or an existing file is not valid XML | Fix permissions or move the corrupt file aside |
 | Provider `HTTP 401` | Wrong OpenRouter or OpenAI admin key | Replace the key and rerun `check` |
 | OpenAI `HTTP 403` | Key is not an organization admin key | Create an admin key in the OpenAI dashboard |
 | Partial delivery | One channel failed; others succeeded | The alert is not resent; fix the failing channel |

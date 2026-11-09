@@ -41,8 +41,8 @@ Standard library only. No database. No secret in the repository.
   and a status emoji turn amber at 50% used and red at 80%, using the higher
   of the monthly window and the closest model limit.
 - **Many channels.** Mattermost, Slack, Discord, IRC, email, WhatsApp,
-  Telegram, and desktop notifications can be enabled together; one failing
-  channel does not block the others.
+  Telegram, desktop notifications, and an RSS 2.0 feed can be enabled
+  together; one failing channel does not block the others.
 - **Percentage alerts.** 5-hour, weekly, and monthly windows alert at 50%,
   80%, and 95% by default, independently of the dollar thresholds.
 - **Alert log.** Every delivery attempt is appended to a JSONL file for audit
@@ -129,7 +129,7 @@ Closest limit: **DeepSeek V4.1 Flash** — $196.14 left of $200.00 (98%)
 
 - Python 3.10 or later, standard library only
 - OpenCode with the OpenCode Go integration connected
-- At least one notification channel: Mattermost, Slack, Discord, IRC, email, WhatsApp, Telegram, or desktop
+- At least one notification channel: Mattermost, Slack, Discord, IRC, email, WhatsApp, Telegram, desktop, or RSS
 - Linux or macOS for cron; systemd timers work too
 
 ---
@@ -184,6 +184,10 @@ by `# opencode-spend-watch`.
 | `RESET_MESSAGE` | `true` | Send a message when the period resets. |
 | `LIMITS_FILE` | `limits.json` | Per-model monthly limits. |
 | `ALERT_LOG` | `STATE_DIR/alerts.log` | JSONL delivery log. |
+| `RSS_FEED` | empty | RSS 2.0 file to append alerts to. |
+| `RSS_TITLE` | `OpenCode Spend Alerts` | Feed title. |
+| `RSS_LINK` | empty | Feed channel link. |
+| `RSS_MAX_ITEMS` | `100` | Items retained in the feed. |
 | `PROVIDERS` | `opencode` | Add `openrouter` and/or `openai`. |
 | `OPENROUTER_API_KEY` | empty | OpenRouter credits API key. |
 | `OPENROUTER_BUDGET_USD` | `0` | Budget; 0 uses purchased credits. |
@@ -205,6 +209,7 @@ receive the alert.
 | WhatsApp | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TO`, `WHATSAPP_API_VERSION` |
 | Telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
 | Desktop | `DESKTOP_NOTIFY=true` (`notify-send`, or `osascript` on macOS) |
+| RSS | `RSS_FEED` points at a writable XML file; subscribe via a local web server, Nextcloud, or any static host |
 
 IRC defaults to port 6697 with TLS, SHA-256 verified by the system trust
 store. Email uses STARTTLS by default; `SMTP_SECURITY` accepts `starttls`,
@@ -307,7 +312,7 @@ checks, plus a Python 3.10–3.14 matrix, CodeQL, and Dependabot.
 | Path | Content |
 | --- | --- |
 | `watch.py` | the watcher |
-| `notify.py` | notification backends |
+| `notify.py` | notification backends, including RSS |
 | `providers.py` | OpenRouter and OpenAI cost sources |
 | `cliff.toml` | changelog and release-notes configuration |
 | `limits.json` | per-model monthly limits and display names |

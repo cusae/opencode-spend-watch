@@ -11,7 +11,7 @@ monthly allowance, the 5-hour/weekly/monthly window percentages, today's
 spend, the top models, and the per-model limit with the least headroom.
 
 Alerts fan out to any configured combination of Mattermost, Slack, Discord,
-IRC, email, WhatsApp, Telegram, and desktop notifications. The OpenCode Go key is read from OpenCode's own
+IRC, email, WhatsApp, Telegram, desktop notifications, and an RSS feed. The OpenCode Go key is read from OpenCode's own
 database (`~/.local/share/opencode/opencode.db`, table `credential`,
 integration `opencode-go`). No secret is stored in this repository.
 
@@ -20,7 +20,7 @@ integration `opencode-go`). No secret is stored in this repository.
 | Path | Content |
 | --- | --- |
 | `watch.py` | the watcher, CLI, API clients, state, delivery orchestration |
-| `notify.py` | Mattermost, Slack, Discord, IRC, email, WhatsApp, Telegram, and desktop backends |
+| `notify.py` | Mattermost, Slack, Discord, IRC, email, WhatsApp, Telegram, desktop, and RSS backends |
 | `providers.py` | OpenRouter credits and OpenAI organization costs |
 | `limits.json` | per-model monthly limits and display labels |
 | `install.sh` | validation, test message, cron installation |

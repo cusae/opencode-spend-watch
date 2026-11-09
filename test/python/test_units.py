@@ -91,7 +91,8 @@ class ConfigTests(unittest.TestCase):
                 "EMAIL_TO=a@example.invalid, b@example.invalid\n"
                 "WHATSAPP_TOKEN=token\nWHATSAPP_PHONE_NUMBER_ID=123\n"
                 "WHATSAPP_TO=456\nTELEGRAM_BOT_TOKEN=token\n"
-                "TELEGRAM_CHAT_ID=42\nDESKTOP_NOTIFY=true\n",
+                "TELEGRAM_CHAT_ID=42\nDESKTOP_NOTIFY=true\n"
+                "RSS_FEED=~/feed.xml\n",
                 encoding="utf-8",
             )
             channels = watch.Config(path).channels()
@@ -106,6 +107,7 @@ class ConfigTests(unittest.TestCase):
                     "whatsapp",
                     "telegram",
                     "desktop",
+                    "rss",
                 ],
             )
             self.assertEqual(channels.email_to, ("a@example.invalid", "b@example.invalid"))

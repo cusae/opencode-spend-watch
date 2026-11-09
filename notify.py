@@ -8,8 +8,10 @@ the others, and the caller decides whether to advance the alert checkpoint.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import html
 import json
+import os
 import re
 import shutil
 import smtplib
@@ -21,9 +23,13 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from email.message import EmailMessage
+from email.utils import format_datetime
+from pathlib import Path
 from typing import Any
 
 USER_AGENT = "opencode-spend-watch/1.0"
@@ -59,6 +65,10 @@ class Channels:
     telegram_token: str = ""
     telegram_chat_id: str = ""
     desktop: bool = False
+    rss_feed: str = ""
+    rss_title: str = "OpenCode Spend Alerts"
+    rss_link: str = ""
+    rss_max_items: int = 100
 
     def names(self) -> list[str]:
         names = []
@@ -78,6 +88,8 @@ class Channels:
             names.append("telegram")
         if self.desktop:
             names.append("desktop")
+        if self.rss_feed:
+            names.append("rss")
         return names
 
 
@@ -324,6 +336,69 @@ def send_desktop(text: str, color: str) -> None:
         raise DeliveryError(str(exc)) from None
 
 
+def send_rss(
+    feed: str,
+    title: str,
+    link: str,
+    text: str,
+    max_items: int = 100,
+) -> None:
+    if max_items < 1:
+        raise DeliveryError("RSS_MAX_ITEMS must be at least 1")
+    path = Path(feed).expanduser()
+    now = datetime.now(timezone.utc)
+    try:
+        if path.exists():
+            tree = ET.parse(path)
+            root = tree.getroot()
+            channel = root.find("channel")
+            if channel is None:
+                raise DeliveryError("existing RSS feed has no channel element")
+        else:
+            root = ET.Element("rss", version="2.0")
+            channel = ET.SubElement(root, "channel")
+            tree = ET.ElementTree(root)
+
+        for tag, value in (
+            ("title", title),
+            ("description", "OpenCode, OpenRouter, and OpenAI spend alerts."),
+        ):
+            node = channel.find(tag)
+            if node is None:
+                node = ET.SubElement(channel, tag)
+            node.text = value
+        if link:
+            node = channel.find("link")
+            if node is None:
+                node = ET.SubElement(channel, "link")
+            node.text = link
+        build = channel.find("lastBuildDate")
+        if build is None:
+            build = ET.SubElement(channel, "lastBuildDate")
+        build.text = format_datetime(now)
+
+        first_line = to_plain(text).strip().splitlines()[0] if text.strip() else "Alert"
+        item = ET.SubElement(channel, "item")
+        ET.SubElement(item, "title").text = first_line.lstrip("*# ").strip()
+        ET.SubElement(item, "guid", isPermaLink="false").text = hashlib.sha256(
+            f"{now.isoformat()}{text}".encode()
+        ).hexdigest()
+        ET.SubElement(item, "pubDate").text = format_datetime(now)
+        ET.SubElement(item, "description").text = to_plain(text)
+
+        items = channel.findall("item")
+        for old in items[:-max_items]:
+            channel.remove(old)
+
+        ET.indent(tree, space="  ")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name(path.name + ".tmp")
+        tree.write(temporary, encoding="utf-8", xml_declaration=True)
+        os.replace(temporary, path)
+    except (OSError, ET.ParseError) as exc:
+        raise DeliveryError(f"RSS feed: {exc}") from None
+
+
 def _html_body(text: str, color: str) -> str:
     return (
         f'<div style="border-left:4px solid {color};padding:8px 14px">'
@@ -392,6 +467,19 @@ def send_all(channels: Channels, text: str, color: str) -> list[Result]:
         )
     if channels.desktop:
         senders.append(("desktop", lambda: send_desktop(text, color)))
+    if channels.rss_feed:
+        senders.append(
+            (
+                "rss",
+                lambda: send_rss(
+                    channels.rss_feed,
+                    channels.rss_title,
+                    channels.rss_link,
+                    text,
+                    channels.rss_max_items,
+                ),
+            )
+        )
 
     results: list[Result] = []
     for name, send in senders:

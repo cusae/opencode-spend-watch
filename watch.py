@@ -171,6 +171,14 @@ class Config:
             telegram_token=env.get("TELEGRAM_BOT_TOKEN", "").strip(),
             telegram_chat_id=env.get("TELEGRAM_CHAT_ID", "").strip(),
             desktop=self._flag(env, "DESKTOP_NOTIFY", False),
+            rss_feed=str(
+                Path(env.get("RSS_FEED", "")).expanduser()
+                if env.get("RSS_FEED", "").strip()
+                else ""
+            ),
+            rss_title=env.get("RSS_TITLE", "OpenCode Spend Alerts").strip(),
+            rss_link=env.get("RSS_LINK", "").strip(),
+            rss_max_items=self._integer(env, "RSS_MAX_ITEMS", 100),
         )
 
     @staticmethod

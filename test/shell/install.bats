@@ -62,6 +62,18 @@ EOF
 	grep -q '^\*/15 \* \* \* \*' "$CRONTAB_OUT"
 }
 
+@test "accepts an RSS feed as the only channel" {
+	stub_tools
+	cat >config.env <<EOF
+RSS_FEED=$TMPDIR_TEST/feed.xml
+STATE_DIR=$TMPDIR_TEST/state
+EOF
+	chmod 600 config.env
+	run ./install.sh
+	[ "$status" -eq 0 ]
+	grep -q '^\*/15 \* \* \* \*' "$CRONTAB_OUT"
+}
+
 @test "accepts a custom cron interval" {
 	stub_tools
 	write_config 7

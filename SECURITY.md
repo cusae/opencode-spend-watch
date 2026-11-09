@@ -21,6 +21,7 @@ secret removed.
 The watcher handles these secrets:
 
 - the OpenCode Go key, read read-only from OpenCode's own database;
+- the RSS feed file, which contains spend amounts and model names;
 - webhook URLs for Mattermost, Slack, and Discord;
 - IRC, SMTP, WhatsApp, and Telegram credentials in the local `config.env`;
 - OpenRouter and OpenAI admin API keys when those providers are enabled.
