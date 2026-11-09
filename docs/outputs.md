@@ -11,7 +11,7 @@ does not block the others.
 | Slack | `SLACK_WEBHOOK_URL` | Three coloured attachments, truncated at 3000 characters each. |
 | Discord | `DISCORD_WEBHOOK_URL` | Three coloured embeds. |
 | IRC | `IRC_HOST`, `IRC_CHANNEL`, `IRC_PORT`, `IRC_TLS`, `IRC_NICK`, `IRC_PASSWORD` | TLS 1.2, certificate verification, message splitting. |
-| Email | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_FROM`, `EMAIL_TO` | Plain text plus an HTML body with a coloured banner and section blocks. |
+| Email | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_FROM`, `EMAIL_TO` | `multipart/alternative`: a UTF-8 plain-text part for mutt/mail, plus an HTML part with a coloured banner and blocks. |
 | WhatsApp | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TO`, `WHATSAPP_API_VERSION` | Meta Cloud API; free-form text only inside the 24-hour window. |
 | Telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Bot API; messages split at 4000 characters. |
 | Desktop | `DESKTOP_NOTIFY=true` | `notify-send` on Linux and FreeBSD, `osascript` on macOS. |

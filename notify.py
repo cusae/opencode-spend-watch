@@ -466,8 +466,8 @@ def send_email(channels: Channels, text: str, color: str) -> None:
     message["Subject"] = "OpenCode spend alert"
     message["From"] = channels.email_from
     message["To"] = ", ".join(channels.email_to)
-    message.set_content(to_plain(text))
-    message.add_alternative(_html_body(text, color), subtype="html")
+    message.set_content(to_plain(text), charset="utf-8")
+    message.add_alternative(_html_body(text, color), subtype="html", charset="utf-8")
 
     security = channels.smtp_security
     client: smtplib.SMTP | None = None

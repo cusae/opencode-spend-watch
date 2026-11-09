@@ -247,6 +247,29 @@ class EmailTests(unittest.TestCase):
         client.starttls.assert_not_called()
         client.send_message.assert_called_once()
 
+    def test_plain_text_alternative_is_mutt_friendly(self):
+        client = mock.MagicMock()
+        text = (
+            f"🟢 **Spend alert**\n**$6.05** used"
+            f"{notify.SECTION}**📊 Allowance**"
+            f"{notify.SECTION}🔗 [Console](https://example.invalid)"
+        )
+        with mock.patch.object(notify.smtplib, "SMTP", return_value=client):
+            notify.send_email(self.channels(), text, "#2e7d32")
+        message = client.send_message.call_args.args[0]
+        self.assertEqual(message.get_content_type(), "multipart/alternative")
+        self.assertEqual(
+            [part.get_content_type() for part in message.iter_parts()],
+            ["text/plain", "text/html"],
+        )
+        plain = message.get_body(preferencelist=("plain",)).get_content()
+        self.assertIn("Spend alert", plain)
+        self.assertIn("Console (https://example.invalid)", plain)
+        self.assertIn("🟢", plain)
+        self.assertNotIn("**", plain)
+        self.assertNotIn(notify.SECTION, plain)
+        self.assertNotIn("<div", plain)
+
     def test_ssl_and_no_login(self):
         client = mock.MagicMock()
         channels = notify.Channels(
