@@ -1,0 +1,82 @@
+name: platforms
+
+on:
+  workflow_call:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: platforms-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: linux (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: debian
+            image: debian:13
+            install: apt-get update -qq && apt-get install -y -qq python3
+          - name: ubuntu
+            image: ubuntu:24.04
+            install: apt-get update -qq && apt-get install -y -qq python3
+          - name: centos
+            image: quay.io/centos/centos:stream10
+            install: dnf install -y python3
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Run the tests
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/src" \
+            -w /src \
+            -e PYTHONDONTWRITEBYTECODE=1 \
+            "${{ matrix.image }}" \
+            sh -c "${{ matrix.install }} && python3 -m unittest discover -s test/python -t . -v && python3 watch.py --version"
+
+  macos:
+    name: macos
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Run the tests
+        run: |
+          python -m unittest discover -s test/python -t . -v
+          python watch.py --version
+
+  freebsd:
+    name: freebsd
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Run the tests
+        uses: vmactions/freebsd-vm@v1
+        with:
+          usesh: true
+          prepare: pkg install -y python311
+          run: |
+            python3.11 -m unittest discover -s test/python -t . -v
+            python3.11 watch.py --version

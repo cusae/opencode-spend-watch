@@ -13,3 +13,10 @@ state/
 .coverage
 coverage.xml
 htmlcov/
+debian/.debhelper/
+debian/opencode-spend-watch/
+debian/files
+debian/*.substvars
+debian/debhelper-build-stamp
+dist/
+rpmbuild/

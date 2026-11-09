@@ -1,0 +1,114 @@
+{
+  "name": "cusae-opencode_spend_watch",
+  "version": "1.0.0",
+  "author": "Cusae",
+  "summary": "Dollar-threshold and usage alerts for OpenCode, OpenRouter, and OpenAI spend",
+  "license": "GPL-3.0-or-later",
+  "source": "https://github.com/cusae/opencode-spend-watch",
+  "project_page": "https://github.com/cusae/opencode-spend-watch",
+  "issues_url": "https://github.com/cusae/opencode-spend-watch/issues",
+  "dependencies": [
+    {
+      "name": "python3",
+      "version_requirement": ">= 3.10"
+    }
+  ],
+  "optional_dependencies": [
+    {
+      "name": "cron",
+      "version_requirement": ">= 3"
+    },
+    {
+      "name": "flock",
+      "version_requirement": ">= 2.37"
+    },
+    {
+      "name": "libnotify",
+      "version_requirement": ">= 0.7"
+    }
+  ],
+  "build_dependencies": [
+    {
+      "name": "debhelper",
+      "version_requirement": ">= 13"
+    },
+    {
+      "name": "rpm-build",
+      "version_requirement": ">= 4.19"
+    },
+    {
+      "name": "git-cliff",
+      "version_requirement": ">= 2.14"
+    }
+  ],
+  "test_dependencies": [
+    {
+      "name": "coverage",
+      "version_requirement": "= 7.17.2"
+    },
+    {
+      "name": "mypy",
+      "version_requirement": "= 2.4.1"
+    },
+    {
+      "name": "ruff",
+      "version_requirement": "= 0.17.4"
+    },
+    {
+      "name": "yamllint",
+      "version_requirement": "= 1.38.0"
+    },
+    {
+      "name": "bats",
+      "version_requirement": ">= 1.13"
+    },
+    {
+      "name": "shellcheck",
+      "version_requirement": ">= 0.9"
+    },
+    {
+      "name": "markdownlint-cli2",
+      "version_requirement": ">= 0.19"
+    },
+    {
+      "name": "actionlint",
+      "version_requirement": ">= 1.7"
+    }
+  ],
+  "requirements": [
+    {
+      "name": "python",
+      "version_requirement": ">= 3.10"
+    }
+  ],
+  "operatingsystem_support": [
+    {
+      "operatingsystem": "Debian",
+      "operatingsystemrelease": ["12", "13"]
+    },
+    {
+      "operatingsystem": "Ubuntu",
+      "operatingsystemrelease": ["22.04", "24.04"]
+    },
+    {
+      "operatingsystem": "CentOS",
+      "operatingsystemrelease": ["Stream 10"]
+    },
+    {
+      "operatingsystem": "FreeBSD",
+      "operatingsystemrelease": ["13", "14"]
+    },
+    {
+      "operatingsystem": "Darwin",
+      "operatingsystemrelease": ["14", "15"]
+    }
+  ],
+  "tags": [
+    "opencode",
+    "spend",
+    "usage",
+    "mattermost",
+    "monitoring",
+    "alerts"
+  ]
+}

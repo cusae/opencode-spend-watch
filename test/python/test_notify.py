@@ -77,6 +77,7 @@ class ChannelTests(unittest.TestCase):
 
     def test_desktop_uses_notify_send(self):
         with (
+            mock.patch.object(notify.sys, "platform", "linux"),
             mock.patch.object(notify.shutil, "which", return_value="/usr/bin/notify-send"),
             mock.patch.object(notify.subprocess, "run") as run,
         ):
@@ -88,6 +89,7 @@ class ChannelTests(unittest.TestCase):
 
     def test_desktop_reports_a_missing_helper(self):
         with (
+            mock.patch.object(notify.sys, "platform", "linux"),
             mock.patch.object(notify.shutil, "which", return_value=None),
             self.assertRaises(notify.DeliveryError),
         ):
