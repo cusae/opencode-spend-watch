@@ -793,17 +793,22 @@ def poll_providers(config: Config, state: dict[str, Any]) -> bool:
         if entry.get("period_key") != snapshot.period_key:
             entry.clear()
             entry["period_key"] = snapshot.period_key
-        if snapshot.spend < entry.get("last_spend", 0.0):
-            entry["last_level"] = level
-            entry["percent_threshold"] = 0.0
-        entry["last_spend"] = snapshot.spend
         if "last_level" not in entry:
+            entry["step"] = config.step
             entry["last_level"] = level
             entry["percent_threshold"] = max(
                 (value for value in config.percent_thresholds if percent and percent >= value),
                 default=0.0,
             )
+            entry["last_spend"] = snapshot.spend
             continue
+        if entry.get("step") != config.step:
+            entry["step"] = config.step
+            entry["last_level"] = level
+        if snapshot.spend < entry.get("last_spend", 0.0):
+            entry["last_level"] = level
+            entry["percent_threshold"] = 0.0
+        entry["last_spend"] = snapshot.spend
 
         last_level = int(entry.get("last_level", 0))
         if level > last_level:
@@ -865,6 +870,7 @@ def poll(config: Config) -> int:
                 "daily": state.get("daily", {}),
                 "initialized": True,
                 "last_level": 0,
+                "step": config.step,
             }
 
         if not state.get("initialized"):
@@ -884,6 +890,7 @@ def poll(config: Config) -> int:
                     "initialized": True,
                     "daily": stats["days"],
                     "last_level": int(stats["period_total"] / config.step),
+                    "step": config.step,
                 }
             )
             baseline_percent(stats, state, config.percent_thresholds)
@@ -895,6 +902,9 @@ def poll(config: Config) -> int:
         merged.update(stats["days"])
         stats["days"] = merged
         level = int(stats["period_total"] / config.step)
+        if state.get("step") != config.step:
+            state["step"] = config.step
+            state["last_level"] = level
         last_level = int(state.get("last_level", 0))
         state.update({"daily": merged, "period_end": period_end})
 
