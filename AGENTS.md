@@ -22,6 +22,7 @@ integration `opencode-go`). No secret is stored in this repository.
 | `watch.py` | the watcher, CLI, API clients, state, delivery orchestration |
 | `notify.py` | Mattermost, Slack, Discord, IRC, email, WhatsApp, Telegram, desktop, and RSS backends |
 | `providers.py` | OpenRouter credits and OpenAI organization costs |
+| `configmerge.py` | merge new example options into an existing config |
 | `limits.json` | per-model monthly limits and display labels |
 | `install.sh` | validation, test message, cron installation |
 | `config.example.env` | empty template; `config.env` is local and ignored |
@@ -49,7 +50,8 @@ $ ./install.sh                # installs the cron job (default: 15 min)
 
 `poll` is the cron entry point. `check` validates the key and every API used.
 `report` prints the message without sending it. `test-webhook` sends one test
-message. `--version` and `--help` complete the CLI.
+message. `merge-config` adds new example options without changing values.
+`--version` and `--help` complete the CLI.
 
 ## Data sources
 
@@ -76,7 +78,7 @@ Run `make check` before every commit. It runs:
 ```console
 $ ruff check .
 $ ruff format --check .
-$ mypy watch.py notify.py providers.py  # strict mode
+$ mypy watch.py notify.py providers.py configmerge.py  # strict mode
 $ python3 -m py_compile watch.py
 $ coverage run -m unittest discover -s test/python -t . -v
 $ coverage report               # 90% minimum

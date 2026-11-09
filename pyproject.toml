@@ -23,7 +23,7 @@ strict = true
 
 [tool.coverage.run]
 branch = true
-source = ["watch", "notify", "providers"]
+source = ["watch", "notify", "providers", "configmerge"]
 
 [tool.coverage.report]
 fail_under = 90

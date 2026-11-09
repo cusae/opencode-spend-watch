@@ -11,7 +11,7 @@ GIT_CLIFF ?= git-cliff
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup hooks lint format format-check types test coverage shell docs changelog check clean
+.PHONY: help setup hooks lint format format-check types test coverage shell docs changelog config-merge check clean
 
 help: ## Show the available targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) \
@@ -35,7 +35,7 @@ format-check: ## Verify formatting without changing files
 	$(RUFF) format --check .
 
 types: ## Type-check watch.py
-	$(MYPY) watch.py notify.py providers.py
+	$(MYPY) watch.py notify.py providers.py configmerge.py
 
 test: ## Run the Python tests
 	$(PYTHON) -m py_compile watch.py
@@ -50,6 +50,9 @@ shell: ## Run the bats and shellcheck suites
 
 changelog: ## Regenerate CHANGELOG.md from Conventional Commits
 	$(GIT_CLIFF) --output CHANGELOG.md
+
+config-merge: ## Add new example options to config.env, keeping current values
+	$(PYTHON) watch.py merge-config
 
 docs: ## Lint Markdown, YAML, and the GitHub workflows
 	$(MARKDOWNLINT)

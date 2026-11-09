@@ -300,6 +300,14 @@ class CommandTests(unittest.TestCase):
                 self.assertEqual(watch.main(["watch.py"]), 0)
                 poll.assert_called_once()
 
+    def test_main_dispatches_merge_config_without_loading_the_config(self):
+        with (
+            mock.patch.dict("os.environ", {"OSW_CONFIG": "/nonexistent/config.env"}),
+            mock.patch.object(watch.configmerge, "main", return_value=0) as merge,
+        ):
+            self.assertEqual(watch.main(["watch.py", "merge-config", "--dry-run"]), 0)
+        merge.assert_called_once_with(["--dry-run"])
+
     def test_main_rejects_an_unknown_command(self):
         with mock.patch.dict("os.environ", {"OSW_CONFIG": str(self.dir / "config.env")}):
             self.assertEqual(watch.main(["watch.py", "bogus"]), 2)

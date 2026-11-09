@@ -39,7 +39,7 @@ jobs:
         run: ruff format --check .
 
       - name: Type-check
-        run: mypy watch.py notify.py providers.py
+        run: mypy watch.py notify.py providers.py configmerge.py
 
       - name: Compile
         run: python -m py_compile watch.py

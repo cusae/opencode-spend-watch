@@ -204,10 +204,24 @@ release, not the changelog.
 
 ## Upgrade
 
+Never overwrite `config.env` after an upgrade. Merge the new options; existing
+values stay untouched and the old file is backed up:
+
 ```console
 $ git pull --ff-only
+$ python3 watch.py merge-config --dry-run
+$ python3 watch.py merge-config
 $ python3 watch.py check
 ```
 
+For a package install:
+
+```console
+$ sudo opencode-spend-watch merge-config --dry-run
+$ sudo opencode-spend-watch merge-config
+```
+
+The helper prints the added option names, creates
+`config.env.bak.YYYYMMDDTHHMMSS`, keeps the file mode, and writes atomically.
 `install.sh` is idempotent; rerun it after an upgrade that changes the cron
 entry. `limits.json` is versioned; review its changes when Go pricing changes.

@@ -31,8 +31,12 @@ install -Dm644 notify.py \
     %{buildroot}%{_prefix}/lib/opencode-spend-watch/notify.py
 install -Dm644 providers.py \
     %{buildroot}%{_prefix}/lib/opencode-spend-watch/providers.py
+install -Dm644 configmerge.py \
+    %{buildroot}%{_prefix}/lib/opencode-spend-watch/configmerge.py
 install -Dm644 limits.json \
     %{buildroot}%{_prefix}/lib/opencode-spend-watch/limits.json
+install -Dm644 config.example.env \
+    %{buildroot}%{_prefix}/lib/opencode-spend-watch/config.example.env
 
 %files
 %{_bindir}/opencode-spend-watch
