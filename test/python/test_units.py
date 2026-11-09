@@ -90,13 +90,23 @@ class ConfigTests(unittest.TestCase):
                 "SMTP_HOST=smtp.invalid\nEMAIL_FROM=from@example.invalid\n"
                 "EMAIL_TO=a@example.invalid, b@example.invalid\n"
                 "WHATSAPP_TOKEN=token\nWHATSAPP_PHONE_NUMBER_ID=123\n"
-                "WHATSAPP_TO=456\n",
+                "WHATSAPP_TO=456\nTELEGRAM_BOT_TOKEN=token\n"
+                "TELEGRAM_CHAT_ID=42\nDESKTOP_NOTIFY=true\n",
                 encoding="utf-8",
             )
             channels = watch.Config(path).channels()
             self.assertEqual(
                 channels.names(),
-                ["mattermost", "slack", "discord", "irc", "email", "whatsapp"],
+                [
+                    "mattermost",
+                    "slack",
+                    "discord",
+                    "irc",
+                    "email",
+                    "whatsapp",
+                    "telegram",
+                    "desktop",
+                ],
             )
             self.assertEqual(channels.email_to, ("a@example.invalid", "b@example.invalid"))
             self.assertTrue(channels.irc_tls)
@@ -107,6 +117,31 @@ class ConfigTests(unittest.TestCase):
             path.write_text("IRC_PORT=not-a-port\n", encoding="utf-8")
             with self.assertRaisesRegex(watch.ConfigError, "IRC_PORT"):
                 watch.Config(path)
+
+    def test_rejects_invalid_percentage_thresholds(self):
+        for value in ("abc", "0,80", "80,100"):
+            with tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "config.env"
+                path.write_text(f"PERCENT_THRESHOLDS={value}\n", encoding="utf-8")
+                with self.assertRaises(watch.ConfigError):
+                    watch.Config(path)
+
+    def test_rejects_invalid_provider_budgets(self):
+        for name in ("OPENROUTER_BUDGET_USD", "OPENAI_BUDGET_USD"):
+            with tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "config.env"
+                path.write_text(f"{name}=lots\n", encoding="utf-8")
+                with self.assertRaisesRegex(watch.ConfigError, name):
+                    watch.Config(path)
+
+    def test_defaults_for_alerts_and_providers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.env"
+            path.write_text("", encoding="utf-8")
+            config = watch.Config(path)
+            self.assertEqual(config.percent_thresholds, (50.0, 80.0, 95.0))
+            self.assertEqual(config.providers, ("opencode",))
+            self.assertEqual(config.alert_log, config.state_dir / "alerts.log")
 
     def test_rejects_an_invalid_smtp_security(self):
         with tempfile.TemporaryDirectory() as tmp:

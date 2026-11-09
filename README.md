@@ -40,8 +40,15 @@ Standard library only. No database. No secret in the repository.
 - **Coloured severity.** Mattermost and Slack attachments, Discord embeds,
   and a status emoji turn amber at 50% used and red at 80%, using the higher
   of the monthly window and the closest model limit.
-- **Many channels.** Mattermost, Slack, Discord, IRC, email, and WhatsApp can
-  be enabled together; one failing channel does not block the others.
+- **Many channels.** Mattermost, Slack, Discord, IRC, email, WhatsApp,
+  Telegram, and desktop notifications can be enabled together; one failing
+  channel does not block the others.
+- **Percentage alerts.** 5-hour, weekly, and monthly windows alert at 50%,
+  80%, and 95% by default, independently of the dollar thresholds.
+- **Alert log.** Every delivery attempt is appended to a JSONL file for audit
+  and later inspection.
+- **More providers.** OpenRouter credits and OpenAI organization costs can be
+  tracked alongside OpenCode Go with the same thresholds and channels.
 - **Safe by default.** The OpenCode key is read read-only and never logged,
   printed, or sent. `config.env` is git-ignored and mode 600.
 - **Cron-sized.** One process, one state file, one file lock, stdlib only.
@@ -122,7 +129,7 @@ Closest limit: **DeepSeek V4.1 Flash** — $196.14 left of $200.00 (98%)
 
 - Python 3.10 or later, standard library only
 - OpenCode with the OpenCode Go integration connected
-- At least one notification channel: Mattermost, Slack, Discord, IRC, email, or WhatsApp
+- At least one notification channel: Mattermost, Slack, Discord, IRC, email, WhatsApp, Telegram, or desktop
 - Linux or macOS for cron; systemd timers work too
 
 ---
@@ -172,9 +179,17 @@ by `# opencode-spend-watch`.
 | `OPENCODE_DB` | `~/.local/share/opencode/opencode.db` | Key source. |
 | `OPENCODE_GO_KEY` | unset | Optional key override. |
 | `CONSOLE_URL` | empty | Link added to each message. |
+| `PERCENT_THRESHOLDS` | `50,80,95` | Percentage levels for window alerts. |
 | `STARTUP_MESSAGE` | `true` | Send the first-run message. |
 | `RESET_MESSAGE` | `true` | Send a message when the period resets. |
 | `LIMITS_FILE` | `limits.json` | Per-model monthly limits. |
+| `ALERT_LOG` | `STATE_DIR/alerts.log` | JSONL delivery log. |
+| `PROVIDERS` | `opencode` | Add `openrouter` and/or `openai`. |
+| `OPENROUTER_API_KEY` | empty | OpenRouter credits API key. |
+| `OPENROUTER_BUDGET_USD` | `0` | Budget; 0 uses purchased credits. |
+| `OPENAI_ADMIN_KEY` | empty | OpenAI organization admin key. |
+| `OPENAI_ORG_ID` | empty | Optional OpenAI organization header. |
+| `OPENAI_BUDGET_USD` | `0` | Monthly OpenAI budget; 0 disables remaining. |
 
 At least one channel is required; several can run together. Delivery is
 isolated per channel: a broken backend is logged and the healthy ones still
@@ -188,11 +203,25 @@ receive the alert.
 | IRC | `IRC_HOST`, `IRC_PORT`, `IRC_TLS`, `IRC_NICK`, `IRC_CHANNEL`, `IRC_PASSWORD` |
 | Email | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_FROM`, `EMAIL_TO` |
 | WhatsApp | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TO`, `WHATSAPP_API_VERSION` |
+| Telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
+| Desktop | `DESKTOP_NOTIFY=true` (`notify-send`, or `osascript` on macOS) |
 
 IRC defaults to port 6697 with TLS, SHA-256 verified by the system trust
 store. Email uses STARTTLS by default; `SMTP_SECURITY` accepts `starttls`,
 `ssl`, or `none`. WhatsApp uses the Meta Cloud API. `EMAIL_TO` accepts a
 comma-separated list.
+
+OpenCode Go is always tracked. `PROVIDERS=opencode,openrouter,openai` adds the
+other cost sources:
+
+| Provider | Source | Budget |
+| --- | --- | --- |
+| OpenRouter | `/api/v1/credits` | purchased credits, or `OPENROUTER_BUDGET_USD` |
+| OpenAI | organization costs, current month | `OPENAI_BUDGET_USD` |
+
+OpenRouter alerts compare cumulative usage, and show the remaining credit.
+OpenAI alerts use the current calendar month and show the remaining budget when
+one is set.
 
 The full runbook, including rotation and recovery, is in
 [docs/operations.md](docs/operations.md).
@@ -277,6 +306,7 @@ checks, plus a Python 3.10–3.14 matrix, CodeQL, and Dependabot.
 | --- | --- |
 | `watch.py` | the watcher |
 | `notify.py` | notification backends |
+| `providers.py` | OpenRouter and OpenAI cost sources |
 | `limits.json` | per-model monthly limits and display names |
 | `install.sh` | validation and cron installation |
 | `test/python/` | unit tests |

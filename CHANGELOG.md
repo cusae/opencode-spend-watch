@@ -20,8 +20,14 @@ All notable changes to this project are documented here. The format follows
 - `CRON_INTERVAL_MINUTES` for `install.sh`; the default is 15 minutes.
 - Coloured Mattermost attachments and status emoji: green below 50% used,
   amber from 50%, red from 80%.
-- Slack, Discord, IRC, email, and WhatsApp notification backends. Several
-  channels can run together with per-channel failure isolation.
+- Slack, Discord, IRC, email, WhatsApp, Telegram, and desktop notification
+  backends. Several channels can run together with per-channel failure
+  isolation.
+- Percentage alerts for the 5-hour, weekly, and monthly windows, defaulting to
+  50%, 80%, and 95%.
+- A rotating JSONL delivery log (`alerts.log`).
+- OpenRouter credit tracking and OpenAI organization cost tracking alongside
+  OpenCode Go.
 
 ### Changed
 

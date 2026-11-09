@@ -3,8 +3,9 @@
 ## Install
 
 1. Create at least one destination: a Mattermost or Slack Incoming Webhook, a
-   Discord webhook, an IRC channel, an SMTP account, or a WhatsApp Cloud API
-   app. See [Notification channels](#notification-channels).
+   Discord webhook, an IRC channel, an SMTP account, a WhatsApp Cloud API app,
+   a Telegram bot, or a working desktop notifier. See
+   [Notification channels](#notification-channels).
 2. Create the local configuration:
 
    ```console
@@ -51,10 +52,40 @@ failed.
 | IRC | Set `IRC_HOST`, `IRC_CHANNEL`, and optionally `IRC_PORT` (6697), `IRC_TLS` (true), `IRC_NICK`, `IRC_PASSWORD`. TLS certificates are verified; long messages are split. |
 | Email | Set `SMTP_HOST`, `EMAIL_FROM`, `EMAIL_TO` (comma-separated), and optionally `SMTP_PORT` (587), `SMTP_SECURITY` (`starttls`, `ssl`, `none`), `SMTP_USER`, `SMTP_PASSWORD`. The message carries a colour bar in the HTML part. |
 | WhatsApp | Set `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TO`, and optionally `WHATSAPP_API_VERSION` (v21.0). Uses the Meta Cloud API. |
+| Telegram | Create a bot with `@BotFather`, set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. Long messages are split at 4000 characters. |
+| Desktop | Set `DESKTOP_NOTIFY=true`. Uses `notify-send` on Linux and `osascript` on macOS; the helper must be on `PATH`. |
 
 WhatsApp only accepts free-form text inside the customer service window. An
 alert sent outside that window is rejected by Meta; use a template or another
 channel for unattended monitoring.
+
+## Percentage alerts and the log
+
+`PERCENT_THRESHOLDS` (default `50,80,95`) alerts when the 5-hour, weekly, or
+monthly window crosses a level. Each window and reset period fires once per
+threshold, so a poll loop does not spam the channel. Dollar thresholds and
+percentage thresholds are independent.
+
+Every delivery attempt is appended to `ALERT_LOG` (default
+`STATE_DIR/alerts.log`) as one JSON line: time, kind, full message, and the
+result of each channel. The file rotates to `alerts.log.1` at 5 MB. It never
+contains credentials.
+
+## Extra cost providers
+
+`PROVIDERS=opencode,openrouter,openai` adds cost sources alongside OpenCode Go.
+
+| Provider | Credential | Budget |
+| --- | --- | --- |
+| OpenRouter | `OPENROUTER_API_KEY` | `OPENROUTER_BUDGET_USD`, or the purchased credit total when 0 |
+| OpenAI | `OPENAI_ADMIN_KEY` (organization admin) | `OPENAI_BUDGET_USD` |
+
+`PROVIDERS` must contain `opencode`; the other names are optional. OpenRouter
+uses cumulative usage against credits and alerts on each new dollar. OpenAI
+sums the organization cost API for the current calendar month. Both use the
+same `THRESHOLD_STEP_USD` and `PERCENT_THRESHOLDS`, the same channels, and the
+same lock and retry rules. `watch.py check` reports every provider or the
+failing credential.
 
 ## Day-to-day
 
@@ -68,8 +99,9 @@ The state directory holds:
 
 | Path | Meaning |
 | --- | --- |
-| `state.json` | billing period, checkpoint, daily history |
+| `state.json` | billing periods, checkpoints, daily history, provider state |
 | `state.lock` | poll serialization |
+| `alerts.log` | JSONL delivery audit, rotates at 5 MB |
 | `cron.log` | cron output |
 
 Back up `config.env` and `state.json` together. Losing `state.json` resets the
@@ -90,6 +122,11 @@ baseline and the daily history; the next poll reinitializes from the API's
 | IRC `401`/`464` | Bad nick or password | Fix `IRC_NICK` and `IRC_PASSWORD` |
 | SMTP authentication error | Wrong `SMTP_SECURITY` or credentials | Try `starttls`, `ssl`, or an app password |
 | WhatsApp `131047` | Outside the 24-hour customer service window | Use a template or another channel |
+| Telegram `401` | Invalid bot token | Recreate the bot token with `@BotFather` |
+| Telegram `400 chat not found` | Wrong chat ID, or the bot never received a message | Send `/start` to the bot, then copy the chat ID |
+| Desktop delivery failed | `notify-send` or `osascript` missing | Install `libnotify-bin` or disable `DESKTOP_NOTIFY` |
+| Provider `HTTP 401` | Wrong OpenRouter or OpenAI admin key | Replace the key and rerun `check` |
+| OpenAI `HTTP 403` | Key is not an organization admin key | Create an admin key in the OpenAI dashboard |
 | Partial delivery | One channel failed; others succeeded | The alert is not resent; fix the failing channel |
 | No alerts but spend grows | Threshold not crossed yet, or delivery failing | Run `report`; inspect `cron.log` |
 | Duplicate alert | Delivery succeeded but state was lost or restored from backup | Expected after a state restore; the next crossing corrects it |

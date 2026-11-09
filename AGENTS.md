@@ -11,7 +11,7 @@ monthly allowance, the 5-hour/weekly/monthly window percentages, today's
 spend, the top models, and the per-model limit with the least headroom.
 
 Alerts fan out to any configured combination of Mattermost, Slack, Discord,
-IRC, email, and WhatsApp. The OpenCode Go key is read from OpenCode's own
+IRC, email, WhatsApp, Telegram, and desktop notifications. The OpenCode Go key is read from OpenCode's own
 database (`~/.local/share/opencode/opencode.db`, table `credential`,
 integration `opencode-go`). No secret is stored in this repository.
 
@@ -20,7 +20,8 @@ integration `opencode-go`). No secret is stored in this repository.
 | Path | Content |
 | --- | --- |
 | `watch.py` | the watcher, CLI, API clients, state, delivery orchestration |
-| `notify.py` | Mattermost, Slack, Discord, IRC, email, and WhatsApp backends |
+| `notify.py` | Mattermost, Slack, Discord, IRC, email, WhatsApp, Telegram, and desktop backends |
+| `providers.py` | OpenRouter credits and OpenAI organization costs |
 | `limits.json` | per-model monthly limits and display labels |
 | `install.sh` | validation, test message, cron installation |
 | `config.example.env` | empty template; `config.env` is local and ignored |
@@ -71,7 +72,7 @@ Run `make check` before every commit. It runs:
 ```console
 $ ruff check .
 $ ruff format --check .
-$ mypy watch.py notify.py                 # strict mode, configured in pyproject.toml
+$ mypy watch.py notify.py providers.py  # strict mode
 $ python3 -m py_compile watch.py
 $ coverage run -m unittest discover -s test/python -t . -v
 $ coverage report               # 90% minimum
@@ -82,7 +83,7 @@ $ markdownlint-cli2
 ```
 
 Python tests must not touch the network; they monkeypatch `collect`, `fetch_*`,
-and `post_webhook`. Bats covers `install.sh` in a sandbox and the commit hook in
+`providers._get_json`, and the delivery transport. Bats covers `install.sh` in a sandbox and the commit hook in
 a throwaway repository. Any finding, at any severity, is a failure.
 
 CI runs the same checks in `.github/workflows/tests.yml` across Python 3.10 to
@@ -104,8 +105,9 @@ pull request. Keep `CHANGELOG.md` current under `[Unreleased]`.
 ## Configuration and secrets
 
 - `config.env` is local, mode 600, and git-ignored. Never commit it.
-- Never commit a webhook URL, SMTP password, WhatsApp token, IRC password, an
-  OpenCode key, an org ID, or a state file.
+- Never commit a webhook URL, SMTP password, WhatsApp token, Telegram token,
+  OpenRouter key, OpenAI admin key, IRC password, an OpenCode key, an org ID,
+  or a state file.
 - `config.example.env` stays empty: `MATTERMOST_WEBHOOK_URL=""` and
   `CONSOLE_URL=""`.
 - Do not log the key or put it in a message. Only its length may be printed by
