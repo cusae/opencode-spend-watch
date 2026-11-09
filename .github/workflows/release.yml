@@ -31,6 +31,6 @@ jobs:
       - name: Create the GitHub release
         uses: softprops/action-gh-release@v3
         with:
-          body: ${{ steps.cliff.outputs.changelog }}
+          body: ${{ steps.cliff.outputs.content }}
           files: CHANGELOG.md
           generate_release_notes: false
