@@ -102,9 +102,9 @@ class CommandTests(unittest.TestCase):
                 self.assertEqual(configmerge.main([str(example), str(target)]), 0)
             self.assertIn("no missing options", output.getvalue())
 
-    def test_default_paths_exist_in_a_checkout(self):
+    def test_default_paths_resolve(self):
         self.assertTrue(configmerge.default_example().exists())
-        self.assertTrue(configmerge.default_target().exists())
+        self.assertEqual(configmerge.default_target().name, "config.env")
 
     def test_missing_example_is_an_error(self):
         with tempfile.TemporaryDirectory() as tmp:
