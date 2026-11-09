@@ -155,6 +155,20 @@ class ProviderPollTests(unittest.TestCase):
         self.assertTrue(watch.poll_providers(cfg, state))
         self.assertEqual(len(self.sent), 2)
 
+    def test_changing_the_step_rebaselines_a_provider(self):
+        state = {}
+        cfg = config(self.dir, providers=("openrouter",))
+        self.snapshots = [self.snapshot(1.5, budget=100.0)]
+        watch.poll_providers(cfg, state)
+        cfg.step = 5.0
+        self.snapshots = [self.snapshot(5.5, budget=100.0)]
+        watch.poll_providers(cfg, state)
+        self.assertEqual(self.sent, [])
+        self.snapshots = [self.snapshot(10.2, budget=100.0)]
+        watch.poll_providers(cfg, state)
+        self.assertEqual(len(self.sent), 1)
+        self.assertEqual(state["providers"]["openrouter"]["step"], 5.0)
+
     def test_provider_error_is_reported(self):
         state = {}
         cfg = config(self.dir, providers=("openrouter",))

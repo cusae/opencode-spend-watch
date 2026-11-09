@@ -145,6 +145,22 @@ class PollTests(unittest.TestCase):
         self.assertIn("crossed $10.00", self.sent[0])
         self.assertEqual(self.state()["last_level"], 2)
 
+    def test_changing_the_step_rebaselines(self):
+        self.collect_value = 5.0
+        self.run_poll()
+        self.sent.clear()
+
+        self.config.step = 5.0
+        self.collect_value = 5.9
+        self.run_poll()
+        self.assertEqual(self.sent, [])
+
+        self.collect_value = 10.1
+        self.run_poll()
+        self.assertEqual(len(self.sent), 1)
+        self.assertEqual(self.state()["step"], 5.0)
+        self.assertEqual(self.state()["last_level"], 2)
+
     def test_multiple_crossed_thresholds_in_one_message(self):
         self.run_poll()
         self.sent.clear()
