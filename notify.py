@@ -33,6 +33,8 @@ from pathlib import Path
 from typing import Any
 
 USER_AGENT = "opencode-spend-watch/1.0"
+SECTION = "\n\n---\n\n"
+SECTION_COLORS = ("#1e88e5", "#6a1b9a", "#00897b", "#ef6c00", "#455a64")
 IRC_LINE_LIMIT = 400
 SLACK_LIMIT = 3000
 DISCORD_LIMIT = 4096
@@ -117,8 +119,14 @@ def _truncate(text: str, limit: int) -> str:
     return text[: limit - 1] + "…"
 
 
+def _sections(text: str) -> list[str]:
+    parts = [part.strip() for part in text.split(SECTION) if part.strip()]
+    return parts or [text]
+
+
 def to_plain(text: str) -> str:
     """Reduce the alert Markdown to text for IRC, email, and WhatsApp."""
+    text = text.replace(SECTION, "\n\n")
     text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1 (\2)", text)
     return text.replace("**", "").replace("`", "")
 
@@ -155,30 +163,38 @@ def _post_json(
 
 
 def send_mattermost(url: str, text: str, color: str, attempts: int = 3) -> None:
+    colors = (color, *SECTION_COLORS)
+    attachments = [
+        {"color": colors[index % len(colors)], "text": section}
+        for index, section in enumerate(_sections(text))
+    ]
     _post_json(
         url,
         {
             "username": "OpenCode Spend",
             "icon_emoji": ":money_with_wings:",
-            "attachments": [{"color": color, "text": text}],
+            "attachments": attachments,
         },
         attempts=attempts,
     )
 
 
 def send_slack(url: str, text: str, color: str, attempts: int = 3) -> None:
+    colors = (color, *SECTION_COLORS)
+    attachments = [
+        {
+            "color": colors[index % len(colors)],
+            "text": _truncate(section, SLACK_LIMIT),
+            "mrkdwn_in": ["text"],
+        }
+        for index, section in enumerate(_sections(text))
+    ]
     _post_json(
         url,
         {
             "username": "OpenCode Spend",
             "icon_emoji": ":money_with_wings:",
-            "attachments": [
-                {
-                    "color": color,
-                    "text": _truncate(text, SLACK_LIMIT),
-                    "mrkdwn_in": ["text"],
-                }
-            ],
+            "attachments": attachments,
         },
         attempts=attempts,
     )
@@ -322,6 +338,13 @@ def send_desktop(text: str, color: str) -> None:
     title = "OpenCode spend"
     body = _truncate(plain.strip(), 500)
     urgency = "critical" if color == "#c62828" else "normal"
+    icon = (
+        "dialog-error"
+        if color == "#c62828"
+        else "dialog-warning"
+        if color == "#f9a825"
+        else "dialog-information"
+    )
     if sys.platform == "darwin":
         script = f'display notification {json.dumps(body)} with title "{title}"'
         command = ["osascript", "-e", script]
@@ -329,7 +352,17 @@ def send_desktop(text: str, color: str) -> None:
         binary = shutil.which("notify-send")
         if not binary:
             raise DeliveryError("notify-send not found")
-        command = [binary, "-a", "OpenCode Spend", "-u", urgency, title, body]
+        command = [
+            binary,
+            "-a",
+            "OpenCode Spend",
+            "-i",
+            icon,
+            "-u",
+            urgency,
+            title,
+            body,
+        ]
     try:
         subprocess.run(command, check=True, capture_output=True, timeout=10)
     except (OSError, subprocess.SubprocessError) as exc:
@@ -399,12 +432,33 @@ def send_rss(
         raise DeliveryError(f"RSS feed: {exc}") from None
 
 
-def _html_body(text: str, color: str) -> str:
-    return (
-        f'<div style="border-left:4px solid {color};padding:8px 14px">'
-        '<pre style="font-family:monospace;white-space:pre-wrap">'
-        f"{html.escape(text)}</pre></div>"
+def _inline_html(text: str) -> str:
+    escaped = html.escape(text)
+    escaped = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", escaped)
+    return re.sub(
+        r"\[([^\]]+)\]\((https?://[^)]+)\)",
+        r'<a href="\2">\1</a>',
+        escaped,
     )
+
+
+def _html_body(text: str, color: str) -> str:
+    colors = (color, *SECTION_COLORS)
+    blocks = []
+    for index, section in enumerate(_sections(text)):
+        blocks.append(
+            f'<div style="border-left:6px solid {colors[index % len(colors)]};'
+            "background:#f6f8fa;padding:10px 14px;margin:8px 0;border-radius:4px;"
+            'font-family:sans-serif">'
+            '<div style="white-space:pre-wrap;line-height:1.5">'
+            f"{_inline_html(section)}</div></div>"
+        )
+    banner = (
+        f'<div style="background:{color};color:#fff;padding:10px 14px;'
+        'border-radius:4px 4px 0 0;font-family:sans-serif;font-weight:bold">'
+        "OpenCode Spend</div>"
+    )
+    return banner + "".join(blocks)
 
 
 def send_email(channels: Channels, text: str, color: str) -> None:

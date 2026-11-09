@@ -112,16 +112,26 @@ schema, failure model, and API contract.
 🟢 **OpenCode spend — threshold reached**
 **$6.05** used this period (crossed $6.00).
 
-Billing period: 27 Oct 2026 14:09 UTC → 27 Nov 2026 14:09 UTC
-Monthly allowance: **4% used**, 96% left
-Windows: 5-hour 0% · weekly 6% · monthly 4%
+**⏳ Billing period**
+27 Oct 2026 14:09 UTC → 27 Nov 2026 14:09 UTC
 
-Today (UTC): **$1.63** · last 7 days: **$3.70**
-Top models (30d): DeepSeek V4.1 Flash $3.86 · Claude Haiku 5.5 $0.69
-Closest limit: **DeepSeek V4.1 Flash** — $196.14 left of $200.00 (98%)
+**📊 Monthly allowance**
+🟩⬜⬜⬜⬜⬜⬜⬜⬜⬜ **4% used** · **96% left**
 
-[Open the console](https://opencode.ai/console/<org-id>/activity/overview?range=30d)
+**🪟 Windows**
+5-hour 🟢 0% · weekly 🟡 6% · monthly 🟢 4%
+
+**📅 Today** (UTC) **$1.63** · last 7 days **$3.70**
+**🤖 Top models** (30d) DeepSeek V4.1 Flash $3.86 · Claude Haiku 5.5 $0.69
+**🎯 Closest limit** **DeepSeek V4.1 Flash** — $196.14 left of $200.00 (98%)
+
+🔗 [Open the console](https://opencode.ai/console/<org-id>/activity/overview?range=30d)
 ```
+
+The three sections become three coloured attachment bars in Mattermost and
+Slack, three coloured embeds in Discord, and three coloured blocks in the
+email HTML. Text-only channels keep the emoji, progress bar, and section
+labels.
 
 ---
 

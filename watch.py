@@ -47,6 +47,7 @@ COLOR_GREEN = "#2e7d32"
 COLOR_AMBER = "#f9a825"
 COLOR_RED = "#c62828"
 COLOR_BLUE = "#1e88e5"
+COLOR_PURPLE = "#6a1b9a"
 MICROCENTS = 100_000_000  # 1 USD = 1e8 microcents
 LOCAL_CONFIG = Path(__file__).with_name("config.env")
 SYSTEM_CONFIG = Path("/etc/opencode-spend-watch/config.env")
@@ -433,6 +434,27 @@ def format_percent(value: float | None) -> str:
     return f"{value:.0f}%"
 
 
+def percent_marker(value: float | None) -> str:
+    if value is None:
+        return "⚪"
+    if value >= 80:
+        return "🔴"
+    if value >= 50:
+        return "🟡"
+    return "🟢"
+
+
+def progress_bar(value: float | None, width: int = 10) -> str:
+    if value is None:
+        return "⬜" * width
+    percent = max(0.0, min(100.0, value))
+    filled = round(percent / 100 * width)
+    if percent > 0 and filled == 0:
+        filled = 1
+    block = "🟥" if percent >= 80 else "🟨" if percent >= 50 else "🟩"
+    return block * filled + "⬜" * (width - filled)
+
+
 def usage_severity(stats: dict[str, Any]) -> float:
     """Percentage used, from the monthly window and the closest model limit."""
     monthly_raw = (stats["windows"].get("monthly") or {}).get("percent") or 0.0
@@ -517,46 +539,54 @@ def build_message(
         else:
             lead = f"**{money(stats['period_total'])}** used this period."
 
-    title = f"{message_emoji(stats, kind)} {title}"
+    status = f"{message_emoji(stats, kind)} {title}\n{lead}"
 
-    lines = [
-        title,
-        lead,
-        "",
-        f"Billing period: {format_moment(stats['period_start'])} → "
-        f"{format_moment(stats['period_end'])}",
-        f"Monthly allowance: **{format_percent(monthly_used)} used**, "
-        f"{format_percent(monthly_left)} left",
-        f"Windows: 5-hour {format_percent(rolling.get('percent'))} · "
-        f"weekly {format_percent(weekly.get('percent'))} · "
-        f"monthly {format_percent(monthly_used)}",
-        "",
-        f"Today (UTC): **{money(stats['today'])}** · last 7 days: **{money(stats['last7'])}**",
+    usage = "\n\n".join(
+        [
+            f"**⏳ Billing period**\n"
+            f"{format_moment(stats['period_start'])} → "
+            f"{format_moment(stats['period_end'])}",
+            f"**📊 Monthly allowance**\n"
+            f"{progress_bar(monthly_used)} "
+            f"**{format_percent(monthly_used)} used** · "
+            f"**{format_percent(monthly_left)} left**",
+            f"**🪟 Windows**\n"
+            f"5-hour {percent_marker(rolling.get('percent'))} "
+            f"{format_percent(rolling.get('percent'))} · "
+            f"weekly {percent_marker(weekly.get('percent'))} "
+            f"{format_percent(weekly.get('percent'))} · "
+            f"monthly {percent_marker(monthly_used)} "
+            f"{format_percent(monthly_used)}",
+        ]
+    )
+
+    context = [
+        f"**📅 Today** (UTC) **{money(stats['today'])}** · last 7 days **{money(stats['last7'])}**"
     ]
-
     top = [m for m in stats["models"] if m["cost"] > 0][:3]
     labels = config.labels()
     if top:
-        lines.append(
-            "Top models (30d): "
+        context.append(
+            "**🤖 Top models** (30d) "
             + " · ".join(f"{labels.get(m['model'], m['model'])} {money(m['cost'])}" for m in top)
         )
 
     closest = stats.get("closest")
     if closest:
-        lines.append(
-            f"Closest limit: **{labels.get(closest['model'], closest['model'])}** — "
+        context.append(
+            f"**🎯 Closest limit** "
+            f"**{labels.get(closest['model'], closest['model'])}** — "
             f"{money(closest['remaining'])} left of {money(closest['limit'])} "
             f"({100 * closest['remaining'] / closest['limit']:.0f}%)"
         )
 
     if stats.get("coverage_gap"):
-        lines.append("_Note: the first day of this period is older than the 30-day API window._")
+        context.append("_Note: the first day of this period is older than the 30-day API window._")
 
     if config.console_url:
-        lines += ["", f"[Open the console]({config.console_url})"]
+        context.append(f"🔗 [Open the console]({config.console_url})")
 
-    return "\n".join(lines)
+    return notify.SECTION.join([status, usage, "\n\n".join(context)])
 
 
 # --------------------------------------------------------------------------- delivery
@@ -679,18 +709,23 @@ def build_percent_message(
     label = {"rolling": "5-hour", "weekly": "weekly", "monthly": "monthly"}.get(window, window)
     entry = stats["windows"].get(window) or {}
     emoji = "🚨" if percent >= 80 else "🟡" if percent >= 50 else "🟢"
+    status = (
+        f"{emoji} **OpenCode usage — {label} window at {percent:.0f}%**\n"
+        f"Crossed the {threshold:.0f}% threshold."
+    )
+    usage = (
+        f"**🪟 Window reset**\n{format_moment(entry.get('resets_at'))}\n\n"
+        f"{progress_bar(percent)} **{percent:.0f}% used**"
+    )
     monthly = (stats["windows"].get("monthly") or {}).get("percent")
-    lines = [
-        f"{emoji} **OpenCode usage — {label} window at {percent:.0f}%**",
-        f"Crossed the {threshold:.0f}% threshold.",
-        "",
-        f"Window resets: {format_moment(entry.get('resets_at'))}",
-        f"Spent this period: **{money(stats['period_total'])}**",
-        f"Monthly allowance: {format_percent(monthly)} used",
-    ]
+    context = (
+        f"**💰 Spent this period** **{money(stats['period_total'])}**\n"
+        f"**📊 Monthly allowance** {progress_bar(monthly)} "
+        f"**{format_percent(monthly)} used**"
+    )
     if config.console_url:
-        lines += ["", f"[Open the console]({config.console_url})"]
-    return "\n".join(lines)
+        context += f"\n\n🔗 [Open the console]({config.console_url})"
+    return notify.SECTION.join([status, usage, context])
 
 
 def baseline_percent(
@@ -755,27 +790,31 @@ def build_provider_message(
     emoji = message_emoji({"windows": {"monthly": {"percent": percent or 0}}})
     if percent is None:
         emoji = "🟢"
-    lines = [
-        f"{emoji} **{snapshot.label} spend — threshold reached**",
-        f"**{money(snapshot.spend)}** used (crossed {money(crossed_from)}–{money(crossed_to)}).",
-    ]
+    status = (
+        f"{emoji} **{snapshot.label} spend — threshold reached**\n"
+        f"**{money(snapshot.spend)}** used "
+        f"(crossed {money(crossed_from)}–{money(crossed_to)})."
+    )
     if snapshot.budget and percent is not None:
-        lines.append(
-            f"Remaining: **{money(snapshot.remaining or 0)}** of "
-            f"**{money(snapshot.budget)}** ({100 - percent:.0f}% left)"
+        usage = (
+            f"**📊 Budget**\n{progress_bar(percent)} "
+            f"**{money(snapshot.remaining or 0)} left** of "
+            f"**{money(snapshot.budget)}** ({100 - percent:.0f}% remaining)"
         )
     elif snapshot.remaining is not None:
-        lines.append(f"Remaining credit: **{money(snapshot.remaining)}**")
+        usage = f"**💳 Remaining credit** **{money(snapshot.remaining)}**"
+    else:
+        usage = ""
+    details = []
     if snapshot.period_start and snapshot.period_end:
-        lines.append(
-            f"Billing period: {format_moment(snapshot.period_start)} → "
+        details.append(
+            f"**⏳ Billing period**\n{format_moment(snapshot.period_start)} → "
             f"{format_moment(snapshot.period_end)}"
         )
     if snapshot.detail:
-        lines.append(f"_{snapshot.detail}_")
-    if config.console_url and snapshot.name == "opencode":
-        lines += ["", f"[Open the console]({config.console_url})"]
-    return "\n".join(lines)
+        details.append(f"_{snapshot.detail}_")
+    parts = [status, usage, "\n\n".join(details)]
+    return notify.SECTION.join(part for part in parts if part)
 
 
 def build_provider_percent_message(
@@ -784,20 +823,23 @@ def build_provider_percent_message(
     threshold: float,
 ) -> str:
     emoji = "🚨" if percent >= 80 else "🟡" if percent >= 50 else "🟢"
-    lines = [
-        f"{emoji} **{snapshot.label} usage at {percent:.0f}%**",
-        f"Crossed the {threshold:.0f}% threshold.",
-        "",
-        f"Spent: **{money(snapshot.spend)}**",
-    ]
+    status = (
+        f"{emoji} **{snapshot.label} usage at {percent:.0f}%**\n"
+        f"Crossed the {threshold:.0f}% threshold."
+    )
+    usage = f"{progress_bar(percent)} **{percent:.0f}% used**\n"
+    usage += f"**💰 Spent** **{money(snapshot.spend)}**"
     if snapshot.budget and snapshot.remaining is not None:
-        lines.append(f"Remaining: **{money(snapshot.remaining)}** of **{money(snapshot.budget)}**")
+        usage += (
+            f"\n**📊 Remaining** **{money(snapshot.remaining)}** of **{money(snapshot.budget)}**"
+        )
+    period = ""
     if snapshot.period_start and snapshot.period_end:
-        lines.append(
-            f"Billing period: {format_moment(snapshot.period_start)} → "
+        period = (
+            f"**⏳ Billing period**\n{format_moment(snapshot.period_start)} → "
             f"{format_moment(snapshot.period_end)}"
         )
-    return "\n".join(lines)
+    return notify.SECTION.join(part for part in (status, usage, period) if part)
 
 
 def poll_providers(config: Config, state: dict[str, Any]) -> bool:
@@ -1016,10 +1058,18 @@ def test_webhook(config: Config) -> int:
     if not names:
         print("no notification channel is configured.")
         return 2
-    text = (
-        "**OpenCode spend watcher — test message**\n"
-        f"If you can read this, alerts will arrive on these channels every "
-        f"{money(config.step)} of OpenCode usage: {', '.join(names)}."
+    text = notify.SECTION.join(
+        [
+            f"🧪 **OpenCode spend watcher — test message**\n"
+            f"Alerts will arrive every {money(config.step)} on: "
+            f"{', '.join(names)}.",
+            f"**📊 Allowance preview**\n{progress_bar(32)} "
+            f"**32% used** · **68% left**\n\n"
+            f"**🪟 Windows** 5-hour 🟢 2% · weekly 🟡 54% · "
+            f"monthly 🟢 32%",
+            "**🎯 Delivery**\nThis is only a test. No spend was recorded.\n\n"
+            "🔗 [Open the project](https://github.com/cusae/opencode-spend-watch)",
+        ]
     )
     results = deliver(config, text, COLOR_BLUE)
     if not delivery_ok(results):
