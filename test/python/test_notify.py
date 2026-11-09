@@ -139,6 +139,15 @@ class ChannelTests(unittest.TestCase):
         with self.assertRaises(notify.DeliveryError):
             notify.send_rss("/tmp/feed.xml", "title", "", "hello", max_items=0)
 
+    def test_sections_become_coloured_attachments(self):
+        text = f"first{notify.SECTION}second{notify.SECTION}third"
+        with mock.patch.object(notify.urllib.request, "urlopen", return_value=response()):
+            notify.send_mattermost("https://example.invalid/hook", text, "#2e7d32")
+            _, payload = request_payload(notify.urllib.request.urlopen)
+        self.assertEqual(len(payload["attachments"]), 3)
+        self.assertEqual(payload["attachments"][0]["color"], "#2e7d32")
+        self.assertNotEqual(payload["attachments"][1]["color"], payload["attachments"][2]["color"])
+
     def test_mattermost_payload(self):
         with mock.patch.object(notify.urllib.request, "urlopen", return_value=response()):
             notify.send_mattermost("https://example.invalid/hook", "hello", "#2e7d32")
