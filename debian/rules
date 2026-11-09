@@ -1,0 +1,25 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_build:
+
+override_dh_auto_test:
+	python3 -m unittest discover -s test/python -t . -v
+
+override_dh_auto_install:
+	install -Dm755 packaging/opencode-spend-watch \
+		debian/opencode-spend-watch/usr/bin/opencode-spend-watch
+	install -d debian/opencode-spend-watch/usr/lib/opencode-spend-watch
+	install -Dm644 watch.py \
+		debian/opencode-spend-watch/usr/lib/opencode-spend-watch/watch.py
+	install -Dm644 notify.py \
+		debian/opencode-spend-watch/usr/lib/opencode-spend-watch/notify.py
+	install -Dm644 providers.py \
+		debian/opencode-spend-watch/usr/lib/opencode-spend-watch/providers.py
+	install -Dm644 limits.json \
+		debian/opencode-spend-watch/usr/lib/opencode-spend-watch/limits.json
+	install -d debian/opencode-spend-watch/usr/share/doc/opencode-spend-watch
+	cp README.md CHANGELOG.md metadata.json config.example.env \
+		debian/opencode-spend-watch/usr/share/doc/opencode-spend-watch/

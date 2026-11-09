@@ -1,0 +1,20 @@
+Source: opencode-spend-watch
+Section: admin
+Priority: optional
+Maintainer: Cusae <asl@launay.org>
+Build-Depends: debhelper-compat (= 13), python3
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+Homepage: https://github.com/cusae/opencode-spend-watch
+Vcs-Git: https://github.com/cusae/opencode-spend-watch.git
+Vcs-Browser: https://github.com/cusae/opencode-spend-watch
+
+Package: opencode-spend-watch
+Architecture: all
+Depends: python3 (>= 3.10), ${misc:Depends}
+Recommends: cron, libnotify-bin
+Description: dollar and usage alerts for OpenCode, OpenRouter and OpenAI
+ A small Python watcher that reads OpenCode, OpenRouter and OpenAI spend,
+ keeps a local history, and posts Mattermost, Slack, Discord, IRC, email,
+ WhatsApp, Telegram, desktop and RSS alerts when configurable dollar or
+ percentage thresholds are crossed.

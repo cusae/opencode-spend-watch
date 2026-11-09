@@ -36,6 +36,10 @@ $ make docs           # markdownlint and workflow lint
 $ make check          # all of the above
 ```
 
+Packaging changes need a local package build; see
+[docs/packaging.md](docs/packaging.md). Keep `metadata.json`, the Debian
+changelog, and the RPM spec at the same version.
+
 CI runs the same commands. A change is not ready while a check fails, even a
 warning.
 

@@ -125,6 +125,32 @@ Closest limit: **DeepSeek V4.1 Flash** — $196.14 left of $200.00 (98%)
 
 ---
 
+## Packages and platforms
+
+Prebuilt Debian and RPM packages are attached to GitHub releases. Install the
+downloaded file, copy the example configuration to `/etc`, then run the
+wrapper:
+
+```console
+$ sudo apt install ./opencode-spend-watch_1.0.0_all.deb
+$ sudo install -d -m 755 /etc/opencode-spend-watch
+$ sudo install -m 600 -o "$USER" -g "$USER" \
+    /usr/share/doc/opencode-spend-watch*/config.example.env \
+    /etc/opencode-spend-watch/config.env
+$ $EDITOR /etc/opencode-spend-watch/config.env
+$ opencode-spend-watch check
+```
+
+RPM uses `sudo dnf install ./opencode-spend-watch-1.0.0-1.noarch.rpm` and the
+same configuration path. FreeBSD and macOS run from a checkout.
+
+Supported platforms: Debian 12/13, Ubuntu 22.04/24.04, CentOS Stream 10,
+FreeBSD 13/14, and macOS 14/15. CI exercises Debian 13, Ubuntu 24.04, CentOS
+Stream 10, current FreeBSD, and current macOS. `metadata.json` lists the
+dependency and OS matrix.
+Package layout, local builds, and release steps are in
+[docs/packaging.md](docs/packaging.md).
+
 ## Requirements
 
 - Python 3.10 or later, standard library only
@@ -228,6 +254,10 @@ OpenRouter alerts compare cumulative usage, and show the remaining credit.
 OpenAI alerts use the current calendar month and show the remaining budget when
 one is set.
 
+All outputs are described in [docs/outputs.md](docs/outputs.md): chat
+channels, email, desktop, RSS, the JSONL audit log, and release assets. That
+page includes a web-server example for subscribing to the RSS feed.
+
 The full runbook, including rotation and recovery, is in
 [docs/operations.md](docs/operations.md).
 
@@ -315,6 +345,8 @@ checks, plus a Python 3.10–3.14 matrix, CodeQL, and Dependabot.
 | `notify.py` | notification backends, including RSS |
 | `providers.py` | OpenRouter and OpenAI cost sources |
 | `cliff.toml` | changelog and release-notes configuration |
+| `metadata.json` | dependency and operating-system matrix |
+| `debian/`, `packaging/rpm/` | Debian and RPM package recipes |
 | `limits.json` | per-model monthly limits and display names |
 | `install.sh` | validation and cron installation |
 | `test/python/` | unit tests |

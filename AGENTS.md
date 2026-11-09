@@ -31,6 +31,9 @@ integration `opencode-go`). No secret is stored in this repository.
 | `docs/operations.md` | install, runbook, rotation, recovery, uninstall |
 | `Makefile` | setup, lint, types, tests, coverage, docs, changelog, `check` |
 | `cliff.toml` | git-cliff configuration for `CHANGELOG.md` and release notes |
+| `metadata.json` | OpenVox-style dependency and OS matrix |
+| `debian/` | Debian package recipe |
+| `packaging/` | binary wrapper and RPM spec |
 
 ## Run
 
@@ -102,6 +105,13 @@ required check is red.
 
 When behaviour changes, update the README and the relevant document in the same
 pull request. Keep `CHANGELOG.md` current under `[Unreleased]`.
+
+## Packaging
+
+`metadata.json`, the Debian changelog, and the RPM spec must agree on the
+version and supported platforms. `docs/packaging.md` is the source of truth for
+the layout and build commands. Never hardcode a second install path: both
+packages use `/usr/lib/opencode-spend-watch` and `/etc/opencode-spend-watch`.
 
 ## Configuration and secrets
 

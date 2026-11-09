@@ -47,8 +47,18 @@ COLOR_AMBER = "#f9a825"
 COLOR_RED = "#c62828"
 COLOR_BLUE = "#1e88e5"
 MICROCENTS = 100_000_000  # 1 USD = 1e8 microcents
-DEFAULT_CONFIG = Path(__file__).with_name("config.env")
+LOCAL_CONFIG = Path(__file__).with_name("config.env")
+SYSTEM_CONFIG = Path("/etc/opencode-spend-watch/config.env")
 DEFAULT_LIMITS = Path(__file__).with_name("limits.json")
+
+
+def default_config() -> Path:
+    if LOCAL_CONFIG.exists():
+        return LOCAL_CONFIG
+    if SYSTEM_CONFIG.exists():
+        return SYSTEM_CONFIG
+    return LOCAL_CONFIG
+
 
 USAGE = """usage: watch.py [poll|check|report|test-webhook|daemon]
 
@@ -1027,7 +1037,7 @@ def main(argv: list[str]) -> int:
         print(f"opencode-spend-watch {VERSION}")
         return 0
 
-    config_path = Path(os.environ.get("OSW_CONFIG", DEFAULT_CONFIG)).expanduser()
+    config_path = Path(os.environ.get("OSW_CONFIG", default_config())).expanduser()
     try:
         config = Config(config_path)
     except ConfigError as exc:
