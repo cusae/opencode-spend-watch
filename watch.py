@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Any
 
 import notify
+import providers
 
 API_BASE = "https://opencode.ai"
 USER_AGENT = "opencode-spend-watch/1.0"
@@ -116,6 +117,34 @@ class Config:
         security = env.get("SMTP_SECURITY", "starttls").strip().lower()
         if security not in ("starttls", "ssl", "none"):
             raise ConfigError("SMTP_SECURITY must be one of starttls, ssl, or none")
+        raw_thresholds = env.get("PERCENT_THRESHOLDS", "50,80,95")
+        try:
+            self.percent_thresholds = tuple(
+                sorted(float(value.strip()) for value in raw_thresholds.split(",") if value.strip())
+            )
+        except ValueError:
+            raise ConfigError(
+                f"PERCENT_THRESHOLDS must be comma-separated numbers, got {raw_thresholds!r}"
+            ) from None
+        if any(value <= 0 or value >= 100 for value in self.percent_thresholds):
+            raise ConfigError("PERCENT_THRESHOLDS values must be between 0 and 100")
+        self.providers = tuple(
+            name.strip().lower()
+            for name in env.get("PROVIDERS", "opencode").split(",")
+            if name.strip()
+        )
+        self.alert_log = Path(env.get("ALERT_LOG", str(self.state_dir / "alerts.log"))).expanduser()
+        self.openrouter_key = env.get("OPENROUTER_API_KEY", "").strip()
+        try:
+            self.openrouter_budget = float(env.get("OPENROUTER_BUDGET_USD", "0") or "0")
+        except ValueError:
+            raise ConfigError("OPENROUTER_BUDGET_USD must be a number") from None
+        self.openai_key = env.get("OPENAI_ADMIN_KEY", "").strip()
+        self.openai_org = env.get("OPENAI_ORG_ID", "").strip()
+        try:
+            self.openai_budget = float(env.get("OPENAI_BUDGET_USD", "0") or "0")
+        except ValueError:
+            raise ConfigError("OPENAI_BUDGET_USD must be a number") from None
         self._channels = notify.Channels(
             mattermost_url=self.webhook,
             slack_url=env.get("SLACK_WEBHOOK_URL", "").strip(),
@@ -139,6 +168,9 @@ class Config:
             whatsapp_phone_id=env.get("WHATSAPP_PHONE_NUMBER_ID", "").strip(),
             whatsapp_to=env.get("WHATSAPP_TO", "").strip(),
             whatsapp_version=env.get("WHATSAPP_API_VERSION", "v21.0").strip(),
+            telegram_token=env.get("TELEGRAM_BOT_TOKEN", "").strip(),
+            telegram_chat_id=env.get("TELEGRAM_CHAT_ID", "").strip(),
+            desktop=self._flag(env, "DESKTOP_NOTIFY", False),
         )
 
     @staticmethod
@@ -582,6 +614,225 @@ class Store:
 # --------------------------------------------------------------------------- cycle
 
 
+def log_delivery(config: Config, kind: str, text: str, results: list[notify.Result]) -> None:
+    path = config.alert_log
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists() and path.stat().st_size > 5_000_000:
+            path.replace(path.with_name(path.name + ".1"))
+        record = {
+            "time": datetime.now(timezone.utc).isoformat(),
+            "kind": kind,
+            "text": text,
+            "channels": [
+                {"name": result.channel, "ok": result.ok, "error": result.error}
+                for result in results
+            ],
+        }
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record) + "\n")
+    except OSError as exc:
+        log(f"cannot write the alert log: {exc}")
+
+
+def deliver_and_log(config: Config, kind: str, text: str, color: str) -> list[notify.Result]:
+    results = deliver(config, text, color)
+    log_delivery(config, kind, text, results)
+    return results
+
+
+def percent_color(percent: float) -> str:
+    if percent >= 80:
+        return COLOR_RED
+    if percent >= 50:
+        return COLOR_AMBER
+    return COLOR_GREEN
+
+
+def build_percent_message(
+    stats: dict[str, Any],
+    window: str,
+    percent: float,
+    threshold: float,
+    config: Config,
+) -> str:
+    label = {"rolling": "5-hour", "weekly": "weekly", "monthly": "monthly"}.get(window, window)
+    entry = stats["windows"].get(window) or {}
+    emoji = "🚨" if percent >= 80 else "🟡" if percent >= 50 else "🟢"
+    monthly = (stats["windows"].get("monthly") or {}).get("percent")
+    lines = [
+        f"{emoji} **OpenCode usage — {label} window at {percent:.0f}%**",
+        f"Crossed the {threshold:.0f}% threshold.",
+        "",
+        f"Window resets: {format_moment(entry.get('resets_at'))}",
+        f"Spent this period: **{money(stats['period_total'])}**",
+        f"Monthly allowance: {format_percent(monthly)} used",
+    ]
+    if config.console_url:
+        lines += ["", f"[Open the console]({config.console_url})"]
+    return "\n".join(lines)
+
+
+def baseline_percent(
+    stats: dict[str, Any], state: dict[str, Any], thresholds: tuple[float, ...]
+) -> None:
+    entries = state.setdefault("percent_alerts", {})
+    for window in ("rolling", "weekly", "monthly"):
+        entry = stats["windows"].get(window) or {}
+        percent = entry.get("percent")
+        if percent is None:
+            continue
+        reset = entry.get("resets_at")
+        crossed = max((value for value in thresholds if percent >= value), default=0.0)
+        entries[window] = {
+            "reset": reset.isoformat() if reset else "",
+            "threshold": crossed,
+        }
+
+
+def process_percent_alerts(config: Config, stats: dict[str, Any], state: dict[str, Any]) -> bool:
+    entries = state.setdefault("percent_alerts", {})
+    delivered_all = True
+    for window in ("rolling", "weekly", "monthly"):
+        entry = stats["windows"].get(window) or {}
+        percent = entry.get("percent")
+        if percent is None:
+            continue
+        reset = entry.get("resets_at")
+        reset_iso = reset.isoformat() if reset else ""
+        current = entries.get(window)
+        if not current or current.get("reset") != reset_iso:
+            current = {"reset": reset_iso, "threshold": 0.0}
+            entries[window] = current
+        crossed = max(
+            (value for value in config.percent_thresholds if percent >= value),
+            default=0.0,
+        )
+        if crossed <= current.get("threshold", 0.0):
+            continue
+        text = build_percent_message(stats, window, percent, crossed, config)
+        results = deliver_and_log(config, "percent", text, percent_color(percent))
+        if delivery_ok(results):
+            current["threshold"] = crossed
+        else:
+            delivered_all = False
+    return delivered_all
+
+
+def provider_percent(snapshot: providers.Snapshot) -> float | None:
+    if not snapshot.budget or snapshot.budget <= 0:
+        return None
+    return 100.0 * snapshot.spend / snapshot.budget
+
+
+def build_provider_message(
+    snapshot: providers.Snapshot,
+    crossed_from: float,
+    crossed_to: float,
+    config: Config,
+) -> str:
+    percent = provider_percent(snapshot)
+    emoji = message_emoji({"windows": {"monthly": {"percent": percent or 0}}})
+    if percent is None:
+        emoji = "🟢"
+    lines = [
+        f"{emoji} **{snapshot.label} spend — threshold reached**",
+        f"**{money(snapshot.spend)}** used (crossed {money(crossed_from)}–{money(crossed_to)}).",
+    ]
+    if snapshot.budget and percent is not None:
+        lines.append(
+            f"Remaining: **{money(snapshot.remaining or 0)}** of "
+            f"**{money(snapshot.budget)}** ({100 - percent:.0f}% left)"
+        )
+    elif snapshot.remaining is not None:
+        lines.append(f"Remaining credit: **{money(snapshot.remaining)}**")
+    if snapshot.period_start and snapshot.period_end:
+        lines.append(
+            f"Billing period: {format_moment(snapshot.period_start)} → "
+            f"{format_moment(snapshot.period_end)}"
+        )
+    if snapshot.detail:
+        lines.append(f"_{snapshot.detail}_")
+    if config.console_url and snapshot.name == "opencode":
+        lines += ["", f"[Open the console]({config.console_url})"]
+    return "\n".join(lines)
+
+
+def build_provider_percent_message(
+    snapshot: providers.Snapshot,
+    percent: float,
+    threshold: float,
+) -> str:
+    emoji = "🚨" if percent >= 80 else "🟡" if percent >= 50 else "🟢"
+    lines = [
+        f"{emoji} **{snapshot.label} usage at {percent:.0f}%**",
+        f"Crossed the {threshold:.0f}% threshold.",
+        "",
+        f"Spent: **{money(snapshot.spend)}**",
+    ]
+    if snapshot.budget and snapshot.remaining is not None:
+        lines.append(f"Remaining: **{money(snapshot.remaining)}** of **{money(snapshot.budget)}**")
+    if snapshot.period_start and snapshot.period_end:
+        lines.append(
+            f"Billing period: {format_moment(snapshot.period_start)} → "
+            f"{format_moment(snapshot.period_end)}"
+        )
+    return "\n".join(lines)
+
+
+def poll_providers(config: Config, state: dict[str, Any]) -> bool:
+    snapshots, errors = providers.collect(config)
+    ok = not errors
+    for error in errors:
+        log(error)
+    store = state.setdefault("providers", {})
+    for snapshot in snapshots:
+        entry = store.setdefault(snapshot.name, {})
+        percent = provider_percent(snapshot)
+        level = int(snapshot.spend / config.step)
+        if entry.get("period_key") != snapshot.period_key:
+            entry.clear()
+            entry["period_key"] = snapshot.period_key
+        if snapshot.spend < entry.get("last_spend", 0.0):
+            entry["last_level"] = level
+            entry["percent_threshold"] = 0.0
+        entry["last_spend"] = snapshot.spend
+        if "last_level" not in entry:
+            entry["last_level"] = level
+            entry["percent_threshold"] = max(
+                (value for value in config.percent_thresholds if percent and percent >= value),
+                default=0.0,
+            )
+            continue
+
+        last_level = int(entry.get("last_level", 0))
+        if level > last_level:
+            text = build_provider_message(
+                snapshot, last_level * config.step, level * config.step, config
+            )
+            color = percent_color(percent) if percent is not None else COLOR_GREEN
+            results = deliver_and_log(config, "provider", text, color)
+            if delivery_ok(results):
+                entry["last_level"] = level
+                log(f"{snapshot.label}: alert sent at {money(snapshot.spend)} (level {level})")
+            else:
+                ok = False
+
+        if percent is not None:
+            crossed = max(
+                (value for value in config.percent_thresholds if percent >= value),
+                default=0.0,
+            )
+            if crossed > entry.get("percent_threshold", 0.0):
+                text = build_provider_percent_message(snapshot, percent, crossed)
+                results = deliver_and_log(config, "provider-percent", text, percent_color(percent))
+                if delivery_ok(results):
+                    entry["percent_threshold"] = crossed
+                else:
+                    ok = False
+    return ok
+
+
 def poll(config: Config) -> int:
     if not config.channels().names():
         log("no notification channel is configured; set MATTERMOST_WEBHOOK_URL or another backend.")
@@ -600,8 +851,9 @@ def poll(config: Config) -> int:
         new_period = state.get("period_end") != period_end
         if new_period and state.get("period_end"):
             if config.reset_message:
-                results = deliver(
+                results = deliver_and_log(
                     config,
+                    "reset",
                     build_message(stats, None, None, config, "reset"),
                     message_color(stats, "reset"),
                 )
@@ -617,8 +869,9 @@ def poll(config: Config) -> int:
 
         if not state.get("initialized"):
             if config.startup_message:
-                results = deliver(
+                results = deliver_and_log(
                     config,
+                    "startup",
                     build_message(stats, None, None, config, "startup"),
                     message_color(stats, "startup"),
                 )
@@ -633,6 +886,7 @@ def poll(config: Config) -> int:
                     "last_level": int(stats["period_total"] / config.step),
                 }
             )
+            baseline_percent(stats, state, config.percent_thresholds)
             store.save(state)
             log(f"initialized at {money(stats['period_total'])}")
             return 0
@@ -648,17 +902,23 @@ def poll(config: Config) -> int:
             crossed_from = last_level * config.step
             crossed_to = level * config.step
             text = build_message(stats, crossed_from, crossed_to, config)
-            results = deliver(config, text, message_color(stats))
+            results = deliver_and_log(config, "threshold", text, message_color(stats))
             if not delivery_ok(results):
                 store.save(state)
                 log("alert not delivered; level not advanced, will retry")
                 return 1
             state["last_level"] = level
-            store.save(state)
             log(f"alert sent: {money(crossed_to)} ({money(stats['period_total'])})")
-            return 0
 
+        percent_ok = process_percent_alerts(config, stats, state)
+        providers_ok = poll_providers(config, state)
         store.save(state)
+        if not percent_ok:
+            log("a percentage alert was not delivered; will retry on the next run")
+            return 1
+        if not providers_ok:
+            log("a provider check or alert failed; will retry on the next run")
+            return 1
         log(f"no change: {money(stats['period_total'])} (level {level})")
         return 0
 
@@ -705,7 +965,16 @@ def check(config: Config) -> int:
     print(f"models: {len(models)}")
     names = config.channels().names()
     print(f"channels: {', '.join(names) or 'none'}")
+    print(f"alerts log: {config.alert_log}")
+    print(f"percent thresholds: {', '.join(f'{value:.0f}' for value in config.percent_thresholds)}")
     print(f"plan: {config.plan} ({len(config.limits())} model limits)")
+    snapshots, errors = providers.collect(config)
+    for snapshot in snapshots:
+        print(f"provider {snapshot.name}: {money(snapshot.spend)} used")
+    for error in errors:
+        print(f"provider: FAIL {error}")
+    if errors:
+        return 1
     if not names:
         print("channels: FAIL configure at least one channel")
         return 1

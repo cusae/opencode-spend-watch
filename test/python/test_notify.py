@@ -55,6 +55,54 @@ class ChannelTests(unittest.TestCase):
             ["mattermost", "slack", "irc", "email", "whatsapp"],
         )
 
+    def test_names_include_telegram_and_desktop(self):
+        channels = notify.Channels(
+            telegram_token="token",
+            telegram_chat_id="42",
+            desktop=True,
+        )
+        self.assertEqual(channels.names(), ["telegram", "desktop"])
+
+    def test_telegram_payload_and_chunking(self):
+        with mock.patch.object(
+            notify.urllib.request, "urlopen", return_value=response()
+        ) as urlopen:
+            notify.send_telegram("secret", "42", "x" * 9000)
+        self.assertEqual(urlopen.call_count, 3)
+        request, payload = request_payload(urlopen)
+        self.assertIn("/botsecret/sendMessage", request.full_url)
+        self.assertEqual(payload["chat_id"], "42")
+
+    def test_desktop_uses_notify_send(self):
+        with (
+            mock.patch.object(notify.shutil, "which", return_value="/usr/bin/notify-send"),
+            mock.patch.object(notify.subprocess, "run") as run,
+        ):
+            notify.send_desktop("**hello**", "#c62828")
+        command = run.call_args.args[0]
+        self.assertEqual(command[0], "/usr/bin/notify-send")
+        self.assertIn("critical", command)
+        self.assertIn("hello", command[-1])
+
+    def test_desktop_reports_a_missing_helper(self):
+        with (
+            mock.patch.object(notify.shutil, "which", return_value=None),
+            self.assertRaises(notify.DeliveryError),
+        ):
+            notify.send_desktop("hello", "#000000")
+
+    def test_desktop_uses_osascript_on_macos(self):
+        with (
+            mock.patch.object(notify.sys, "platform", "darwin"),
+            mock.patch.object(notify.subprocess, "run") as run,
+        ):
+            notify.send_desktop("**hello**", "#000000")
+        self.assertEqual(run.call_args.args[0][0], "osascript")
+
+    def test_text_chunks_prefer_line_boundaries(self):
+        chunks = notify._text_chunks("a" * 5 + "\n" + "b" * 5, 6)
+        self.assertEqual(chunks, ["a" * 5 + "\n", "b" * 5])
+
     def test_mattermost_payload(self):
         with mock.patch.object(notify.urllib.request, "urlopen", return_value=response()):
             notify.send_mattermost("https://example.invalid/hook", "hello", "#2e7d32")
@@ -141,6 +189,19 @@ class EmailTests(unittest.TestCase):
         html_body = message.get_body(preferencelist=("html",)).get_content()
         self.assertIn("#2e7d32", html_body)
 
+    def test_none_security_skips_starttls(self):
+        client = mock.MagicMock()
+        channels = notify.Channels(
+            smtp_host="smtp.example.invalid",
+            smtp_security="none",
+            email_from="from@example.invalid",
+            email_to=("to@example.invalid",),
+        )
+        with mock.patch.object(notify.smtplib, "SMTP", return_value=client):
+            notify.send_email(channels, "hello", "#000000")
+        client.starttls.assert_not_called()
+        client.send_message.assert_called_once()
+
     def test_ssl_and_no_login(self):
         client = mock.MagicMock()
         channels = notify.Channels(
@@ -212,6 +273,22 @@ class IrcTests(unittest.TestCase):
         self.assertIn("JOIN #alerts", joined)
         self.assertIn("PRIVMSG #alerts :hello", joined)
         self.assertIn("QUIT", joined)
+
+    def test_sends_the_irc_password(self):
+        stream = self.FakeStream()
+        socket = self.FakeSocket(stream)
+        channels = notify.Channels(
+            irc_host="irc.example.invalid",
+            irc_tls=False,
+            irc_channel="#alerts",
+            irc_password="secret",
+        )
+        with (
+            mock.patch.object(notify.socket, "create_connection", return_value=socket),
+            mock.patch.object(notify.time, "sleep"),
+        ):
+            notify.send_irc(channels, "hello")
+        self.assertIn("PASS secret", "".join(stream.writes))
 
     def test_connection_failure_is_wrapped(self):
         channels = notify.Channels(irc_host="irc.example.invalid", irc_channel="#alerts")

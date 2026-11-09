@@ -22,7 +22,8 @@ The watcher handles these secrets:
 
 - the OpenCode Go key, read read-only from OpenCode's own database;
 - webhook URLs for Mattermost, Slack, and Discord;
-- IRC, SMTP, and WhatsApp credentials in the local `config.env`.
+- IRC, SMTP, WhatsApp, and Telegram credentials in the local `config.env`;
+- OpenRouter and OpenAI admin API keys when those providers are enabled.
 
 All stay outside the repository. `config.env` is created with mode 600 and is
 git-ignored. The key is never logged, printed, or included in a message. Only
@@ -35,7 +36,7 @@ Console endpoints and the configured notification channels. Webhooks, SMTP, and 
 
 - A local attacker who can read `config.env` can post to every configured
   channel. Protect the file permissions and the accounts.
-- A compromised webhook, token, or password can receive the spend reports.
+- A compromised webhook, bot token, or password can receive the spend reports.
   Treat every channel credential as a secret and rotate it if it leaks.
 - IRC uses TLS with certificate verification by default. Disabling `IRC_TLS`
   exposes the channel password and the reports to the network.

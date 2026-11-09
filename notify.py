@@ -11,9 +11,12 @@ import contextlib
 import html
 import json
 import re
+import shutil
 import smtplib
 import socket
 import ssl
+import subprocess
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -28,6 +31,7 @@ IRC_LINE_LIMIT = 400
 SLACK_LIMIT = 3000
 DISCORD_LIMIT = 4096
 WHATSAPP_LIMIT = 4096
+TELEGRAM_LIMIT = 4000
 
 
 @dataclass(frozen=True)
@@ -52,6 +56,9 @@ class Channels:
     whatsapp_phone_id: str = ""
     whatsapp_to: str = ""
     whatsapp_version: str = "v21.0"
+    telegram_token: str = ""
+    telegram_chat_id: str = ""
+    desktop: bool = False
 
     def names(self) -> list[str]:
         names = []
@@ -67,6 +74,10 @@ class Channels:
             names.append("email")
         if self.whatsapp_token and self.whatsapp_phone_id and self.whatsapp_to:
             names.append("whatsapp")
+        if self.telegram_token and self.telegram_chat_id:
+            names.append("telegram")
+        if self.desktop:
+            names.append("desktop")
         return names
 
 
@@ -262,6 +273,57 @@ def send_irc(channels: Channels, text: str) -> None:
             sock.close()
 
 
+def _text_chunks(text: str, limit: int) -> list[str]:
+    chunks: list[str] = []
+    current = ""
+    for line in text.splitlines(keepends=True):
+        if len(current) + len(line) <= limit:
+            current += line
+            continue
+        if current:
+            chunks.append(current)
+            current = ""
+        while len(line) > limit:
+            chunks.append(line[:limit])
+            line = line[limit:]
+        current = line
+    if current:
+        chunks.append(current)
+    return chunks or [""]
+
+
+def send_telegram(token: str, chat_id: str, text: str) -> None:
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    for chunk in _text_chunks(to_plain(text), TELEGRAM_LIMIT):
+        _post_json(
+            url,
+            {
+                "chat_id": chat_id,
+                "text": chunk,
+                "disable_web_page_preview": True,
+            },
+        )
+
+
+def send_desktop(text: str, color: str) -> None:
+    plain = to_plain(text)
+    title = "OpenCode spend"
+    body = _truncate(plain.strip(), 500)
+    urgency = "critical" if color == "#c62828" else "normal"
+    if sys.platform == "darwin":
+        script = f'display notification {json.dumps(body)} with title "{title}"'
+        command = ["osascript", "-e", script]
+    else:
+        binary = shutil.which("notify-send")
+        if not binary:
+            raise DeliveryError("notify-send not found")
+        command = [binary, "-a", "OpenCode Spend", "-u", urgency, title, body]
+    try:
+        subprocess.run(command, check=True, capture_output=True, timeout=10)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise DeliveryError(str(exc)) from None
+
+
 def _html_body(text: str, color: str) -> str:
     return (
         f'<div style="border-left:4px solid {color};padding:8px 14px">'
@@ -321,6 +383,15 @@ def send_all(channels: Channels, text: str, color: str) -> list[Result]:
         senders.append(("email", lambda: send_email(channels, text, color)))
     if channels.whatsapp_token and channels.whatsapp_phone_id and channels.whatsapp_to:
         senders.append(("whatsapp", lambda: send_whatsapp(channels, text)))
+    if channels.telegram_token and channels.telegram_chat_id:
+        senders.append(
+            (
+                "telegram",
+                lambda: send_telegram(channels.telegram_token, channels.telegram_chat_id, text),
+            )
+        )
+    if channels.desktop:
+        senders.append(("desktop", lambda: send_desktop(text, color)))
 
     results: list[Result] = []
     for name, send in senders:

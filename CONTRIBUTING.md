@@ -44,7 +44,7 @@ warning.
 - Keep the module dependency-free at runtime; development tools belong in
   `requirements-dev.txt`.
 - Follow `ruff format`. The lint rules are in `pyproject.toml`.
-- Type annotations are mandatory: `mypy --strict watch.py notify.py` must pass.
+- Type annotations are mandatory: `mypy --strict watch.py notify.py providers.py` must pass.
 - Tests live in `test/python/` and must not touch the network. Monkeypatch
   `collect`, `fetch_*`, and `post_webhook`.
 - Shell behaviour lives in `install.sh` and `.githooks/commit-msg`; cover it in

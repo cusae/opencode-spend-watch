@@ -25,9 +25,16 @@ set +a
 STATE_DIR="${STATE_DIR/#\~/$HOME}"
 mkdir -p "$STATE_DIR"
 
-if [[ -z "${MATTERMOST_WEBHOOK_URL:-}${SLACK_WEBHOOK_URL:-}${DISCORD_WEBHOOK_URL:-}${IRC_HOST:-}${SMTP_HOST:-}${WHATSAPP_TOKEN:-}" ]]; then
+channel_ready=0
+if [[ -n "${MATTERMOST_WEBHOOK_URL:-}${SLACK_WEBHOOK_URL:-}${DISCORD_WEBHOOK_URL:-}${IRC_HOST:-}${SMTP_HOST:-}${WHATSAPP_TOKEN:-}${TELEGRAM_BOT_TOKEN:-}" ]]; then
+  channel_ready=1
+fi
+if [[ "${DESKTOP_NOTIFY:-false}" == "true" ]]; then
+  channel_ready=1
+fi
+if (( channel_ready == 0 )); then
   echo "Configure at least one notification channel in $CONFIG" >&2
-  echo "(Mattermost, Slack, Discord, IRC, email, or WhatsApp)." >&2
+  echo "(Mattermost, Slack, Discord, IRC, email, WhatsApp, Telegram, or desktop)." >&2
   exit 1
 fi
 
