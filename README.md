@@ -144,8 +144,10 @@ $ opencode-spend-watch check
 RPM uses `sudo dnf install ./opencode-spend-watch-1.0.0-1.noarch.rpm` and the
 same configuration path. FreeBSD and macOS run from a checkout.
 
-Tested platforms: Debian 12/13, Ubuntu 22.04/24.04, CentOS Stream 10, FreeBSD
-13/14, and macOS 14/15. `metadata.json` lists the dependency and OS matrix.
+Supported platforms: Debian 12/13, Ubuntu 22.04/24.04, CentOS Stream 10,
+FreeBSD 13/14, and macOS 14/15. CI exercises Debian 13, Ubuntu 24.04, CentOS
+Stream 10, current FreeBSD, and current macOS. `metadata.json` lists the
+dependency and OS matrix.
 Package layout, local builds, and release steps are in
 [docs/packaging.md](docs/packaging.md).
 
