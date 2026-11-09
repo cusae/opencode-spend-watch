@@ -153,6 +153,43 @@ class ConfigTests(unittest.TestCase):
                 watch.Config(path)
 
 
+class DefaultConfigTests(unittest.TestCase):
+    def paths(self, tmp):
+        local = Path(tmp) / "local.env"
+        system = Path(tmp) / "system.env"
+        return local, system
+
+    def test_prefers_a_local_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            local, system = self.paths(tmp)
+            local.write_text("", encoding="utf-8")
+            system.write_text("", encoding="utf-8")
+            with (
+                mock.patch.object(watch, "LOCAL_CONFIG", local),
+                mock.patch.object(watch, "SYSTEM_CONFIG", system),
+            ):
+                self.assertEqual(watch.default_config(), local)
+
+    def test_falls_back_to_the_system_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            local, system = self.paths(tmp)
+            system.write_text("", encoding="utf-8")
+            with (
+                mock.patch.object(watch, "LOCAL_CONFIG", local),
+                mock.patch.object(watch, "SYSTEM_CONFIG", system),
+            ):
+                self.assertEqual(watch.default_config(), system)
+
+    def test_falls_back_to_the_local_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            local, system = self.paths(tmp)
+            with (
+                mock.patch.object(watch, "LOCAL_CONFIG", local),
+                mock.patch.object(watch, "SYSTEM_CONFIG", system),
+            ):
+                self.assertEqual(watch.default_config(), local)
+
+
 class DateTests(unittest.TestCase):
     def test_parse_iso_accepts_zulu_and_naive_values(self):
         self.assertEqual(

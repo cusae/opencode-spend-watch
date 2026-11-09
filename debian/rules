@@ -18,8 +18,12 @@ override_dh_auto_install:
 		debian/opencode-spend-watch/usr/lib/opencode-spend-watch/notify.py
 	install -Dm644 providers.py \
 		debian/opencode-spend-watch/usr/lib/opencode-spend-watch/providers.py
+	install -Dm644 configmerge.py \
+		debian/opencode-spend-watch/usr/lib/opencode-spend-watch/configmerge.py
 	install -Dm644 limits.json \
 		debian/opencode-spend-watch/usr/lib/opencode-spend-watch/limits.json
+	install -Dm644 config.example.env \
+		debian/opencode-spend-watch/usr/lib/opencode-spend-watch/config.example.env
 	install -d debian/opencode-spend-watch/usr/share/doc/opencode-spend-watch
 	cp README.md CHANGELOG.md metadata.json config.example.env \
 		debian/opencode-spend-watch/usr/share/doc/opencode-spend-watch/

@@ -272,6 +272,7 @@ The full runbook, including rotation and recovery, is in
 | `watch.py report` | Print the message without sending it. |
 | `watch.py test-webhook` | Send one test message. |
 | `watch.py daemon` | Poll every `OSW_INTERVAL` seconds (default 300). |
+| `watch.py merge-config` | Add missing options from `config.example.env`, keeping current values and writing a backup. |
 | `watch.py --version` | Print the version. |
 | `watch.py --help` | Print the usage. |
 
@@ -346,6 +347,7 @@ checks, plus a Python 3.10–3.14 matrix, CodeQL, and Dependabot.
 | `providers.py` | OpenRouter and OpenAI cost sources |
 | `cliff.toml` | changelog and release-notes configuration |
 | `metadata.json` | dependency and operating-system matrix |
+| `configmerge.py` | safe upgrade helper for `config.env` |
 | `debian/`, `packaging/rpm/` | Debian and RPM package recipes |
 | `limits.json` | per-model monthly limits and display names |
 | `install.sh` | validation and cron installation |

@@ -36,6 +36,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+import configmerge
 import notify
 import providers
 
@@ -66,6 +67,7 @@ USAGE = """usage: watch.py [poll|check|report|test-webhook|daemon]
   check         validate key, APIs and configuration
   report        print current statistics without sending
   test-webhook  send one test message
+  merge-config  add new options to config.env without changing values
   daemon        poll every OSW_INTERVAL seconds (default 300)
   --version     print the version
   --help        print this help"""
@@ -1036,6 +1038,9 @@ def main(argv: list[str]) -> int:
     if command in ("-V", "--version", "version"):
         print(f"opencode-spend-watch {VERSION}")
         return 0
+
+    if command == "merge-config":
+        return configmerge.main(argv[2:])
 
     config_path = Path(os.environ.get("OSW_CONFIG", default_config())).expanduser()
     try:

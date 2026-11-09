@@ -30,7 +30,7 @@ Both packages install:
 | Path | Content |
 | --- | --- |
 | `/usr/bin/opencode-spend-watch` | wrapper that runs the module with `python3` |
-| `/usr/lib/opencode-spend-watch/` | `watch.py`, `notify.py`, `providers.py`, `limits.json` |
+| `/usr/lib/opencode-spend-watch/` | `watch.py`, `notify.py`, `providers.py`, `configmerge.py`, `limits.json` |
 | `/usr/share/doc/opencode-spend-watch*/` | README, changelog, metadata, `config.example.env` |
 
 The watcher reads `/etc/opencode-spend-watch/config.env` when no `config.env`
