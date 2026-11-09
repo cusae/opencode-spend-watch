@@ -76,7 +76,7 @@ jobs:
         uses: vmactions/freebsd-vm@v1
         with:
           usesh: true
-          prepare: pkg install -y python311
+          prepare: pkg install -y python311 py311-sqlite3
           run: |
             python3.11 -m unittest discover -s test/python -t . -v
             python3.11 watch.py --version
