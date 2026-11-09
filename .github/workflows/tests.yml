@@ -38,11 +38,14 @@ jobs:
       - name: Check Python formatting
         run: ruff format --check .
 
+      - name: Validate metadata
+        run: python -m json.tool metadata.json >/dev/null
+
       - name: Type-check
         run: mypy watch.py notify.py providers.py configmerge.py
 
       - name: Compile
-        run: python -m py_compile watch.py
+        run: python -m py_compile watch.py notify.py providers.py configmerge.py
 
       - name: Run the tests with coverage
         run: |
@@ -93,7 +96,7 @@ jobs:
           python-version: ${{ matrix.python }}
 
       - name: Compile
-        run: python -m py_compile watch.py
+        run: python -m py_compile watch.py notify.py providers.py configmerge.py
 
       - name: Run the tests
         run: python -m unittest discover -s test/python -t . -v
@@ -130,4 +133,4 @@ jobs:
           sudo apt-get install -y -qq shellcheck
 
       - name: Run shellcheck
-        run: shellcheck install.sh .githooks/commit-msg
+        run: shellcheck install.sh .githooks/commit-msg packaging/opencode-spend-watch
