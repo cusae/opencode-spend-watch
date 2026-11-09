@@ -26,7 +26,7 @@ jobs:
       - name: Install the packaging tools
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq debhelper devscripts fakeroot python3
+          sudo apt-get install -y -qq debhelper devscripts fakeroot build-essential python3
 
       - name: Build the Debian package
         run: |
