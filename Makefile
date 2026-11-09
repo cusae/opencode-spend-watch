@@ -25,7 +25,8 @@ hooks: ## Point git at the repository hooks
 
 lint: ## Lint Python, shell and YAML
 	$(RUFF) check .
-	$(SHELLCHECK) install.sh .githooks/commit-msg
+	$(SHELLCHECK) install.sh .githooks/commit-msg packaging/opencode-spend-watch
+	$(PYTHON) -m json.tool metadata.json >/dev/null
 	$(YAMLLINT) -c .yamllint.yml .github
 
 format: ## Format the Python sources
@@ -38,7 +39,7 @@ types: ## Type-check watch.py
 	$(MYPY) watch.py notify.py providers.py configmerge.py
 
 test: ## Run the Python tests
-	$(PYTHON) -m py_compile watch.py
+	$(PYTHON) -m py_compile watch.py notify.py providers.py configmerge.py
 	$(PYTHON) -m unittest discover -s test/python -t . -v
 
 coverage: ## Run the Python tests with the coverage gate

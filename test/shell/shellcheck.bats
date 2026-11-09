@@ -16,6 +16,16 @@ setup() {
 	[ "$status" -eq 0 ]
 }
 
+@test "shellcheck the package wrapper" {
+	run shellcheck "$REPO_ROOT/packaging/opencode-spend-watch"
+	[ "$status" -eq 0 ]
+}
+
+@test "sh parses the package wrapper" {
+	run sh -n "$REPO_ROOT/packaging/opencode-spend-watch"
+	[ "$status" -eq 0 ]
+}
+
 @test "bash parses install.sh" {
 	run bash -n "$REPO_ROOT/install.sh"
 	[ "$status" -eq 0 ]

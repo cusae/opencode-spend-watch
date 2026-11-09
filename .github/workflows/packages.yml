@@ -1,0 +1,75 @@
+name: packages
+
+on:
+  workflow_call:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: packages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package-deb:
+    name: package-deb
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install the packaging tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq debhelper devscripts fakeroot build-essential python3
+
+      - name: Build the Debian package
+        run: |
+          dpkg-buildpackage -b -us -uc
+          mkdir -p dist
+          cp ../opencode-spend-watch_*.deb dist/
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: debian-package
+          path: dist/*.deb
+          if-no-files-found: error
+
+  package-rpm:
+    name: package-rpm
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    timeout-minutes: 20
+    steps:
+      - name: Install the packaging tools
+        run: dnf install -y git tar gzip rpm-build python3
+
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Run the tests
+        run: python3 -m unittest discover -s test/python -t . -v
+
+      - name: Build the RPM
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          version=$(python3 -c 'import json; print(json.load(open("metadata.json"))["version"])')
+          mkdir -p dist rpmbuild/SOURCES
+          git archive --format=tar.gz \
+            --prefix="opencode-spend-watch-$version/" \
+            --output="rpmbuild/SOURCES/opencode-spend-watch-$version.tar.gz" HEAD
+          rpmbuild -bb packaging/rpm/opencode-spend-watch.spec \
+            --define "_topdir $PWD/rpmbuild"
+          cp rpmbuild/RPMS/noarch/*.rpm dist/
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: rpm-package
+          path: dist/*.rpm
+          if-no-files-found: error
