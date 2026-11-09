@@ -37,6 +37,13 @@ commit_parsers = [
   { message = "^ci", group = "CI" },
   { message = "^build", group = "Changed" },
   { message = "^chore", group = "Other" },
+  { message = "^Add ", group = "Added" },
+  { message = "^Make ", group = "Changed" },
+  { message = "^Professionalize ", group = "Changed" },
+  { message = "^Fix ", group = "Fixed" },
+  { message = "^Rebaseline ", group = "Fixed" },
+  { message = "^Generate ", group = "Documentation" },
+  { message = "^Regenerate ", group = "Documentation" },
   { message = "^revert", group = "Fixed" },
   { message = ".*", group = "Other" },
 ]
