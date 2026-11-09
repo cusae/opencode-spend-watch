@@ -129,6 +129,22 @@ class PollTests(unittest.TestCase):
         self.run_poll()
         self.assertEqual(len(self.sent), 1)
 
+    def test_custom_dollar_step(self):
+        self.config.step = 5.0
+        self.collect_value = 5.0
+        self.run_poll()
+        self.sent.clear()
+
+        self.collect_value = 9.99
+        self.run_poll()
+        self.assertEqual(self.sent, [])
+
+        self.collect_value = 10.1
+        self.run_poll()
+        self.assertEqual(len(self.sent), 1)
+        self.assertIn("crossed $10.00", self.sent[0])
+        self.assertEqual(self.state()["last_level"], 2)
+
     def test_multiple_crossed_thresholds_in_one_message(self):
         self.run_poll()
         self.sent.clear()
@@ -211,6 +227,12 @@ class PollTests(unittest.TestCase):
 
 
 class MessageTests(unittest.TestCase):
+    def test_fractional_step_is_printed_with_cents(self):
+        config = make_config(Path("/tmp/unused"))
+        config.step = 0.5
+        text = watch.build_message(make_stats(1.0), None, None, config, "startup")
+        self.assertIn("$0.50", text)
+
     def test_message_contains_dollars_and_remaining(self):
         config = make_config(Path("/tmp/unused"))
         text = watch.build_message(make_stats(6.05), 5.0, 6.0, config)

@@ -470,7 +470,7 @@ def build_message(
         title = "**OpenCode spend watcher started**"
         lead = (
             f"Tracking from **{money(stats['period_total'])}** this billing period. "
-            f"Next alert at the next ${config.step:.0f}."
+            f"Next alert at the next {money(config.step)}."
         )
     elif kind == "reset":
         title = "**OpenCode billing period reset**"
@@ -989,7 +989,7 @@ def test_webhook(config: Config) -> int:
     text = (
         "**OpenCode spend watcher — test message**\n"
         f"If you can read this, alerts will arrive on these channels every "
-        f"${config.step:.0f} of OpenCode usage: {', '.join(names)}."
+        f"{money(config.step)} of OpenCode usage: {', '.join(names)}."
     )
     results = deliver(config, text, COLOR_BLUE)
     if not delivery_ok(results):

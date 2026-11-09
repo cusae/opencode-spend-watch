@@ -173,7 +173,7 @@ by `# opencode-spend-watch`.
 | --- | --- | --- |
 | `MATTERMOST_WEBHOOK_URL` | empty | Mattermost Incoming Webhook. |
 | `PLAN` | `go-plus` | `go-plus` or `go`; selects limits from `limits.json`. |
-| `THRESHOLD_STEP_USD` | `1` | Alert step in dollars; must be positive. |
+| `THRESHOLD_STEP_USD` | `1` | Dollar step, all providers; any positive value, including decimals. |
 | `CRON_INTERVAL_MINUTES` | `15` | Minutes between cron checks (1–59). |
 | `STATE_DIR` | `~/.local/state/opencode-spend-watch` | State, lock, cron log. |
 | `OPENCODE_DB` | `~/.local/share/opencode/opencode.db` | Key source. |

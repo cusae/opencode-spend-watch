@@ -61,6 +61,10 @@ channel for unattended monitoring.
 
 ## Percentage alerts and the log
 
+`THRESHOLD_STEP_USD` sets the dollar step for every provider. The default `1`
+alerts at $1, $2, $3; set `5` to alert at $5, $10, $15. Fractional values such
+as `0.5` are accepted.
+
 `PERCENT_THRESHOLDS` (default `50,80,95`) alerts when the 5-hour, weekly, or
 monthly window crosses a level. Each window and reset period fires once per
 threshold, so a poll loop does not spam the channel. Dollar thresholds and

@@ -17,6 +17,8 @@ All notable changes to this project are documented here. The format follows
 - `--version` and `--help` on the CLI, with explicit exit codes.
 - Configuration validation: a non-numeric or non-positive threshold is a
   configuration error, not a traceback.
+- `THRESHOLD_STEP_USD` is documented as the global dollar step for every
+  provider; fractional steps now print correctly in the startup message.
 - `CRON_INTERVAL_MINUTES` for `install.sh`; the default is 15 minutes.
 - Coloured Mattermost attachments and status emoji: green below 50% used,
   amber from 50%, red from 80%.
