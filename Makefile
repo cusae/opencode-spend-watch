@@ -7,10 +7,11 @@ SHELLCHECK ?= shellcheck
 ACTIONLINT ?= actionlint
 YAMLLINT ?= $(PYTHON) -m yamllint
 MARKDOWNLINT ?= markdownlint-cli2
+GIT_CLIFF ?= git-cliff
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup hooks lint format format-check types test coverage shell docs check clean
+.PHONY: help setup hooks lint format format-check types test coverage shell docs changelog check clean
 
 help: ## Show the available targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) \
@@ -46,6 +47,9 @@ coverage: ## Run the Python tests with the coverage gate
 
 shell: ## Run the bats and shellcheck suites
 	$(BATS) test/shell
+
+changelog: ## Regenerate CHANGELOG.md from Conventional Commits
+	$(GIT_CLIFF) --output CHANGELOG.md
 
 docs: ## Lint Markdown, YAML, and the GitHub workflows
 	$(MARKDOWNLINT)

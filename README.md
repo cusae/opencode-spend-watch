@@ -296,10 +296,12 @@ See [SECURITY.md](SECURITY.md).
 $ make setup          # pip install -r requirements-dev.txt
 $ make hooks          # use the repository commit hook
 $ make check          # every check
+$ make changelog      # regenerate CHANGELOG.md from commits
 ```
 
 `make check` runs ruff, shellcheck, yamllint, ruff format, mypy --strict,
-coverage (90% gate), bats, markdownlint, and workflow lint. CI runs the same
+coverage (90% gate), bats, markdownlint, and workflow lint. `make changelog`
+needs [git-cliff](https://git-cliff.org). CI runs the same
 checks, plus a Python 3.10–3.14 matrix, CodeQL, and Dependabot.
 
 | Path | Content |
@@ -307,11 +309,17 @@ checks, plus a Python 3.10–3.14 matrix, CodeQL, and Dependabot.
 | `watch.py` | the watcher |
 | `notify.py` | notification backends |
 | `providers.py` | OpenRouter and OpenAI cost sources |
+| `cliff.toml` | changelog and release-notes configuration |
 | `limits.json` | per-model monthly limits and display names |
 | `install.sh` | validation and cron installation |
 | `test/python/` | unit tests |
 | `test/shell/` | bats tests |
 | `docs/` | architecture and operations |
+
+`CHANGELOG.md` is generated from Conventional Commits by
+[git-cliff](https://git-cliff.org) (`make changelog`). Do not edit it by hand.
+A `v*` tag triggers `.github/workflows/release.yml`, which publishes a GitHub
+release with the generated section.
 
 Contribution rules: [CONTRIBUTING.md](CONTRIBUTING.md) and
 [AGENTS.md](AGENTS.md). Release history: [CHANGELOG.md](CHANGELOG.md).

@@ -29,7 +29,8 @@ integration `opencode-go`). No secret is stored in this repository.
 | `test/shell/` | `bats` suite for `install.sh` and the commit hook |
 | `docs/architecture.md` | data flow, state schema, API contract, failure model |
 | `docs/operations.md` | install, runbook, rotation, recovery, uninstall |
-| `Makefile` | setup, lint, types, tests, coverage, docs, `check` |
+| `Makefile` | setup, lint, types, tests, coverage, docs, changelog, `check` |
+| `cliff.toml` | git-cliff configuration for `CHANGELOG.md` and release notes |
 
 ## Run
 
@@ -214,7 +215,9 @@ pushes are disabled.
 
 ### Commit messages
 
-- Subject line in the imperative mood, no trailing period.
+- Subject line in the imperative mood, no trailing period. Use a
+  Conventional Commit type (`feat`, `fix`, `docs`, `ci`, `test`, `refactor`,
+  `perf`); git-cliff derives the changelog from it.
 - Body wrapped at 72 columns, explaining the problem and the reason for
   the change.
 - One logical change per commit.

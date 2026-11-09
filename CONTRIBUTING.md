@@ -20,8 +20,9 @@ $ make check
 ```
 
 `make setup` installs `ruff`, `mypy`, `coverage`, and `yamllint`. Install
-`markdownlint-cli2` (`npm install -g markdownlint-cli2`) and `actionlint` if
-you want `make docs` to run the full documentation checks.
+`markdownlint-cli2` (`npm install -g markdownlint-cli2`), `actionlint`, and
+`git-cliff` (`cargo install git-cliff`, or a release binary) for `make docs`
+and `make changelog`.
 
 ## Checks
 
@@ -58,7 +59,10 @@ warning.
 ## Commits
 
 Commits follow [AGENTS.md](AGENTS.md): imperative subject, 72-column body,
-GPG signature, `Co-authored-by` and `Signed-off-by` trailers. The local
+GPG signature, `Co-authored-by` and `Signed-off-by` trailers. Use a
+Conventional Commit type (`feat`, `fix`, `docs`, `ci`, `test`, `refactor`);
+`CHANGELOG.md` is generated from those prefixes. Do not edit the changelog by
+hand. The local
 `commit-msg` hook rejects a missing or malformed trailer.
 
 ## Pull requests
