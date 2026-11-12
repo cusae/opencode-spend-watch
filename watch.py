@@ -24,6 +24,7 @@ from __future__ import annotations
 import calendar
 import fcntl
 import json
+import math
 import os
 import sqlite3
 import sys
@@ -448,11 +449,18 @@ def progress_bar(value: float | None, width: int = 10) -> str:
     if value is None:
         return "⬜" * width
     percent = max(0.0, min(100.0, value))
-    filled = round(percent / 100 * width)
-    if percent > 0 and filled == 0:
-        filled = 1
-    block = "🟥" if percent > 80 else "🟧" if percent >= 50 else "🟩"
-    return block * filled + "⬜" * (width - filled)
+    filled = math.ceil(percent / 100 * width)
+    squares = []
+    for index in range(width):
+        if index >= filled:
+            squares.append("⬜")
+        elif index < width * 0.5:
+            squares.append("🟩")
+        elif index < width * 0.8:
+            squares.append("🟧")
+        else:
+            squares.append("🟥")
+    return "".join(squares)
 
 
 def usage_severity(stats: dict[str, Any]) -> float:

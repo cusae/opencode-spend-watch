@@ -96,7 +96,9 @@ key already stored locally:
 Every channel gets the same content. Mattermost and Slack render a coloured
 attachment, Discord a coloured embed, email an HTML colour bar; IRC and
 WhatsApp receive plain text. Green below 50% used, orange from 50% through
-80%, red above 80%. Startup is blue and a period reset is green. Severity uses the monthly
+80%, red above 80%. Progress bars are segmented: each square takes the colour
+of its band, and unused squares stay white. Startup is blue and a period reset
+is green. Severity uses the monthly
 percentage and the closest model limit.
 
 The billing period comes from the monthly `resetsAt` timestamp. Spend is the
