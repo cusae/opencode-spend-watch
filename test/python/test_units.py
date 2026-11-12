@@ -303,6 +303,13 @@ class FormatTests(unittest.TestCase):
             "coverage_gap": False,
         }
 
+    def test_progress_bar_colours_each_band(self):
+        self.assertEqual(watch.progress_bar(0), "⬜" * 10)
+        self.assertEqual(watch.progress_bar(54), "🟩" * 5 + "🟧" + "⬜" * 4)
+        self.assertEqual(watch.progress_bar(81), "🟩" * 5 + "🟧" * 3 + "🟥" + "⬜")
+        self.assertEqual(watch.progress_bar(100), "🟩" * 5 + "🟧" * 3 + "🟥" * 2)
+        self.assertEqual(watch.progress_bar(None), "⬜" * 10)
+
     def test_money_and_percent_formatting(self):
         self.assertEqual(watch.money(1234.5), "$1,234.50")
         self.assertEqual(watch.format_percent(None), "n/a")
