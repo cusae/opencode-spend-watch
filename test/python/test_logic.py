@@ -254,7 +254,9 @@ class MessageTests(unittest.TestCase):
         text = watch.build_message(make_stats(6.05), 5.0, 6.0, config)
         self.assertIn("$6.05", text)
         self.assertIn("97% left", text)
-        self.assertIn("$196.20 left of $200.00", text)
+        self.assertIn("2% used", text)
+        self.assertIn("$3.80 used", text)
+        self.assertIn("$196.20 left", text)
         self.assertIn("DeepSeek V4.1 Flash", text)
 
 

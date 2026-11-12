@@ -81,6 +81,7 @@ class PercentAlertTests(unittest.TestCase):
         self.assertIn("🚨", text)
         self.assertEqual(watch.percent_color(82.0), watch.COLOR_RED)
         self.assertEqual(watch.percent_color(60.0), watch.COLOR_AMBER)
+        self.assertEqual(watch.percent_color(80.0), watch.COLOR_AMBER)
         self.assertEqual(watch.percent_color(10.0), watch.COLOR_GREEN)
 
 
