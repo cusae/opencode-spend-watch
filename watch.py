@@ -1068,10 +1068,11 @@ def test_webhook(config: Config) -> int:
             f"🧪 **OpenCode spend watcher — test message**\n"
             f"Alerts will arrive every {money(config.step)} on: "
             f"{', '.join(names)}.",
-            f"**📊 Allowance preview**\n{progress_bar(32)} "
-            f"**32% used** · **68% left**\n\n"
-            f"**🪟 Windows** 5-hour 🟢 2% · weekly 🟡 54% · "
-            f"monthly 🟢 32%",
+            f"**📊 Allowance preview**\n{progress_bar(54)} "
+            f"**54% used** · **46% left**\n\n"
+            f"**🪟 Windows** 5-hour 🟢 2% · weekly 🟠 54% · "
+            f"monthly 🟠 54%\n\n"
+            f"**🎨 Colour scale** 🟢 <50% · 🟠 50–80% · 🔴 >80%",
             "**🎯 Delivery**\nThis is only a test. No spend was recorded.\n\n"
             "🔗 [Open the project](https://github.com/cusae/opencode-spend-watch)",
         ]
