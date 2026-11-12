@@ -38,8 +38,8 @@ Standard library only. No database. No secret in the repository.
   today and last-7-day spend, top models, closest per-model limit, console
   link.
 - **Coloured severity.** Mattermost and Slack attachments, Discord embeds,
-  and a status emoji turn amber at 50% used and red at 80%, using the higher
-  of the monthly window and the closest model limit.
+  and a status emoji turn orange from 50% used and red above 80%, using the
+  higher of the monthly window and the closest model limit.
 - **Many channels.** Mattermost, Slack, Discord, IRC, email, WhatsApp,
   Telegram, desktop notifications, and an RSS 2.0 feed can be enabled
   together; one failing channel does not block the others.
@@ -95,8 +95,8 @@ key already stored locally:
 
 Every channel gets the same content. Mattermost and Slack render a coloured
 attachment, Discord a coloured embed, email an HTML colour bar; IRC and
-WhatsApp receive plain text. Green below 50% used, amber from 50%, red from
-80%. Startup is blue and a period reset is green. Severity uses the monthly
+WhatsApp receive plain text. Green below 50% used, orange from 50% through
+80%, red above 80%. Startup is blue and a period reset is green. Severity uses the monthly
 percentage and the closest model limit.
 
 The billing period comes from the monthly `resetsAt` timestamp. Spend is the
@@ -123,7 +123,7 @@ schema, failure model, and API contract.
 
 **📅 Today** (UTC) **$1.63** · last 7 days **$3.70**
 **🤖 Top models** (30d) DeepSeek V4.1 Flash $3.86 · Claude Haiku 5.5 $0.69
-**🎯 Closest limit** **DeepSeek V4.1 Flash** — $196.14 left of $200.00 (98%)
+**🎯 Closest limit** 🟢 🟩⬜⬜⬜⬜⬜⬜⬜⬜⬜ **DeepSeek V4.1 Flash** — **2% used** · **$3.86 used** of **$200.00** · **$196.14 left**
 
 🔗 [Open the console](https://opencode.ai/console/<org-id>/activity/overview?range=30d)
 ```

@@ -385,8 +385,9 @@ class MessageBranchTests(unittest.TestCase):
         stats = self.stats()
         for percent, color, emoji in (
             (10.0, watch.COLOR_GREEN, "🟢"),
-            (60.0, watch.COLOR_AMBER, "🟡"),
-            (90.0, watch.COLOR_RED, "🔴"),
+            (60.0, watch.COLOR_AMBER, "🟠"),
+            (80.0, watch.COLOR_AMBER, "🟠"),
+            (81.0, watch.COLOR_RED, "🔴"),
         ):
             stats["windows"] = {"monthly": {"percent": percent, "resets_at": None}}
             self.assertEqual(watch.message_color(stats), color)

@@ -44,7 +44,7 @@ API_BASE = "https://opencode.ai"
 USER_AGENT = "opencode-spend-watch/1.0"
 VERSION = "1.0.0"
 COLOR_GREEN = "#2e7d32"
-COLOR_AMBER = "#f9a825"
+COLOR_AMBER = "#ef6c00"  # orange
 COLOR_RED = "#c62828"
 COLOR_BLUE = "#1e88e5"
 COLOR_PURPLE = "#6a1b9a"
@@ -437,10 +437,10 @@ def format_percent(value: float | None) -> str:
 def percent_marker(value: float | None) -> str:
     if value is None:
         return "⚪"
-    if value >= 80:
+    if value > 80:
         return "🔴"
     if value >= 50:
-        return "🟡"
+        return "🟠"
     return "🟢"
 
 
@@ -451,7 +451,7 @@ def progress_bar(value: float | None, width: int = 10) -> str:
     filled = round(percent / 100 * width)
     if percent > 0 and filled == 0:
         filled = 1
-    block = "🟥" if percent >= 80 else "🟨" if percent >= 50 else "🟩"
+    block = "🟥" if percent > 80 else "🟧" if percent >= 50 else "🟩"
     return block * filled + "⬜" * (width - filled)
 
 
@@ -472,7 +472,7 @@ def message_color(stats: dict[str, Any], kind: str = "threshold") -> str:
     if kind in ("startup", "report"):
         return COLOR_BLUE
     level = usage_severity(stats)
-    if level >= 80:
+    if level > 80:
         return COLOR_RED
     if level >= 50:
         return COLOR_AMBER
@@ -487,10 +487,10 @@ def message_emoji(stats: dict[str, Any], kind: str = "threshold") -> str:
     if kind == "report":
         return "📊"
     level = usage_severity(stats)
-    if level >= 80:
+    if level > 80:
         return "🔴"
     if level >= 50:
-        return "🟡"
+        return "🟠"
     return "🟢"
 
 
@@ -573,11 +573,15 @@ def build_message(
 
     closest = stats.get("closest")
     if closest:
+        used = closest["limit"] - closest["remaining"]
+        used_percent = 100.0 * used / closest["limit"]
         context.append(
-            f"**🎯 Closest limit** "
+            f"**🎯 Closest limit** {percent_marker(used_percent)} "
+            f"{progress_bar(used_percent)} "
             f"**{labels.get(closest['model'], closest['model'])}** — "
-            f"{money(closest['remaining'])} left of {money(closest['limit'])} "
-            f"({100 * closest['remaining'] / closest['limit']:.0f}%)"
+            f"**{used_percent:.0f}% used** · "
+            f"**{money(used)} used** of {money(closest['limit'])} · "
+            f"**{money(closest['remaining'])} left**"
         )
 
     if stats.get("coverage_gap"):
@@ -692,7 +696,7 @@ def deliver_and_log(config: Config, kind: str, text: str, color: str) -> list[no
 
 
 def percent_color(percent: float) -> str:
-    if percent >= 80:
+    if percent > 80:
         return COLOR_RED
     if percent >= 50:
         return COLOR_AMBER
@@ -708,7 +712,7 @@ def build_percent_message(
 ) -> str:
     label = {"rolling": "5-hour", "weekly": "weekly", "monthly": "monthly"}.get(window, window)
     entry = stats["windows"].get(window) or {}
-    emoji = "🚨" if percent >= 80 else "🟡" if percent >= 50 else "🟢"
+    emoji = "🚨" if percent > 80 else "🟠" if percent >= 50 else "🟢"
     status = (
         f"{emoji} **OpenCode usage — {label} window at {percent:.0f}%**\n"
         f"Crossed the {threshold:.0f}% threshold."
@@ -798,8 +802,9 @@ def build_provider_message(
     if snapshot.budget and percent is not None:
         usage = (
             f"**📊 Budget**\n{progress_bar(percent)} "
-            f"**{money(snapshot.remaining or 0)} left** of "
-            f"**{money(snapshot.budget)}** ({100 - percent:.0f}% remaining)"
+            f"**{percent:.0f}% used** · "
+            f"**{money(snapshot.spend)} used** of **{money(snapshot.budget)}** · "
+            f"**{money(snapshot.remaining or 0)} left**"
         )
     elif snapshot.remaining is not None:
         usage = f"**💳 Remaining credit** **{money(snapshot.remaining)}**"
@@ -822,7 +827,7 @@ def build_provider_percent_message(
     percent: float,
     threshold: float,
 ) -> str:
-    emoji = "🚨" if percent >= 80 else "🟡" if percent >= 50 else "🟢"
+    emoji = "🚨" if percent > 80 else "🟠" if percent >= 50 else "🟢"
     status = (
         f"{emoji} **{snapshot.label} usage at {percent:.0f}%**\n"
         f"Crossed the {threshold:.0f}% threshold."
