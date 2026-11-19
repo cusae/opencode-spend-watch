@@ -73,11 +73,14 @@ as `0.5` are accepted.
 `PERCENT_THRESHOLDS` (default `50,80,95`) alerts when the 5-hour, weekly, or
 monthly window crosses a level. Each window and reset period fires once per
 threshold, so a poll loop does not spam the channel. Dollar thresholds and
-percentage thresholds are independent.
+percentage thresholds keep separate checkpoints, but everything crossed in one
+poll is sent as a single message.
 
 Every delivery attempt is appended to `ALERT_LOG` (default
 `STATE_DIR/alerts.log`) as one JSON line: time, kind, full message, and the
-result of each channel. The file rotates to `alerts.log.1` at 5 MB. It never
+result of each channel. The `kind` is `alert` for merged OpenCode thresholds,
+`provider` for extra providers, and `startup`, `reset`, or `report` for the
+informational messages. The file rotates to `alerts.log.1` at 5 MB. It never
 contains credentials.
 
 ## Extra cost providers

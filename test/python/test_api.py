@@ -366,19 +366,37 @@ class MessageBranchTests(unittest.TestCase):
             "coverage_gap": False,
         }
 
-    def test_reports_a_range_of_crossed_thresholds(self):
-        text = watch.build_message(self.stats(), 5.0, 9.0, self.config)
+    def test_alert_reports_a_range_of_crossed_thresholds(self):
+        triggers = [watch.spend_trigger(5.0, 9.0, 9.0)]
+        text = watch.build_alert_message(self.stats(), triggers, self.config)
         self.assertIn("$5.00–$9.00", text)
 
-    def test_reports_a_single_threshold_without_a_console_link(self):
-        text = watch.build_message(self.stats(), 8.0, 9.0, self.config)
+    def test_alert_reports_a_single_threshold_without_a_console_link(self):
+        triggers = [watch.spend_trigger(8.0, 9.0, 9.0)]
+        text = watch.build_alert_message(self.stats(), triggers, self.config)
         self.assertIn("crossed $9.00", text)
         self.assertNotIn("Open the console", text)
+
+    def test_alert_merges_spend_and_percent_triggers(self):
+        triggers = [
+            watch.spend_trigger(8.0, 9.0, 9.0),
+            {
+                "kind": "percent",
+                "window": "weekly",
+                "percent": 51.0,
+                "threshold": 50.0,
+                "reset": "",
+            },
+        ]
+        text = watch.build_alert_message(self.stats(), triggers, self.config)
+        self.assertIn("2 thresholds reached", text)
+        self.assertIn("crossed $9.00", text)
+        self.assertIn("Weekly window at 51% (crossed 50%)", text)
 
     def test_handles_a_missing_monthly_window(self):
         stats = self.stats()
         stats["windows"] = {}
-        text = watch.build_message(stats, None, None, self.config)
+        text = watch.build_message(stats, self.config)
         self.assertIn("n/a", text)
 
     def test_colors_follow_the_monthly_percentage(self):
@@ -410,8 +428,8 @@ class MessageBranchTests(unittest.TestCase):
         self.assertEqual(watch.message_color(stats, "startup"), watch.COLOR_BLUE)
         self.assertEqual(watch.message_color(stats, "reset"), watch.COLOR_GREEN)
         self.assertEqual(watch.message_color(stats, "report"), watch.COLOR_BLUE)
-        self.assertIn("ℹ️", watch.build_message(stats, None, None, self.config, "startup"))
-        self.assertIn("🔄", watch.build_message(stats, None, None, self.config, "reset"))
+        self.assertIn("ℹ️", watch.build_message(stats, self.config, "startup"))
+        self.assertIn("🔄", watch.build_message(stats, self.config, "reset"))
 
 
 if __name__ == "__main__":

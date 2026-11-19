@@ -69,7 +69,7 @@ ALERT_LOG=~/.local/state/opencode-spend-watch/alerts.log
 One JSON object per delivery attempt:
 
 ```json
-{"time":"2026-11-09T00:00:00+00:00","kind":"threshold","text":"**OpenCode spend ...","channels":[{"name":"mattermost","ok":true,"error":null}]}
+{"time":"2026-11-09T00:00:00+00:00","kind":"alert","text":"**OpenCode usage ...","channels":[{"name":"mattermost","ok":true,"error":null}]}
 ```
 
 The file rotates to `alerts.log.1` at 5 MB. Inspect failures with:

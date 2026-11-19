@@ -16,6 +16,7 @@ def config(tmp: Path, **extra):
         "alert_log": tmp / "alerts.log",
         "step": 1.0,
         "console_url": "",
+        "labels": lambda: {},
         "channels": lambda: notify.Channels(),
         **extra,
     }
@@ -38,7 +39,15 @@ def stats(rolling=0.0, weekly=6.0, monthly=3.0, total=5.0):
                 "resets_at": datetime(2026, 11, 27, 14, 9, tzinfo=timezone.utc),
             },
         },
+        "days": {},
+        "period_start": datetime(2026, 10, 27, 14, 9, tzinfo=timezone.utc),
+        "period_end": datetime(2026, 11, 27, 14, 9, tzinfo=timezone.utc),
         "period_total": total,
+        "today": 1.0,
+        "last7": 2.0,
+        "models": [],
+        "closest": None,
+        "coverage_gap": False,
     }
 
 
@@ -63,22 +72,40 @@ class PercentAlertTests(unittest.TestCase):
         self.assertEqual(state["percent_alerts"]["monthly"]["threshold"], 80.0)
         self.assertEqual(self.sent, [])
 
-    def test_crossing_sends_once_and_rearms_after_reset(self):
+    def test_crossing_is_reported_once_and_rearms_after_reset(self):
         state = {}
         watch.baseline_percent(stats(monthly=3.0), state, self.cfg.percent_thresholds)
-        self.assertTrue(watch.process_percent_alerts(self.cfg, stats(monthly=52.0), state))
-        self.assertEqual(len(self.sent), 1)
-        self.assertIn("50% threshold", self.sent[0][0])
-        self.assertTrue(watch.process_percent_alerts(self.cfg, stats(monthly=52.0), state))
-        self.assertEqual(len(self.sent), 1)
+        crossings = watch.percent_crossings(self.cfg, stats(monthly=52.0), state)
+        self.assertEqual([crossing["window"] for crossing in crossings], ["monthly"])
+        text = watch.build_alert_message(stats(monthly=52.0), crossings, self.cfg)
+        self.assertIn("Monthly window at 52% (crossed 50%)", text)
+
+        watch.apply_crossings(state, crossings)
+        self.assertEqual(watch.percent_crossings(self.cfg, stats(monthly=52.0), state), [])
 
         state["percent_alerts"]["monthly"]["reset"] = "stale"
-        watch.process_percent_alerts(self.cfg, stats(monthly=52.0), state)
-        self.assertEqual(len(self.sent), 2)
+        self.assertEqual(len(watch.percent_crossings(self.cfg, stats(monthly=52.0), state)), 1)
+
+    def test_spend_and_percent_crossings_share_one_message(self):
+        state = {}
+        watch.baseline_percent(stats(weekly=3.0), state, self.cfg.percent_thresholds)
+        triggers = [watch.spend_trigger(54.0, 55.0, 55.31)]
+        triggers.extend(watch.percent_crossings(self.cfg, stats(weekly=52.0), state))
+        text = watch.build_alert_message(stats(weekly=52.0, total=55.31), triggers, self.cfg)
+        self.assertIn("2 thresholds reached", text)
+        self.assertIn("$55.31", text)
+        self.assertIn("crossed $55.00", text)
+        self.assertIn("Weekly window at 52% (crossed 50%)", text)
+        self.assertEqual(self.sent, [])
 
     def test_severity_colour_and_emoji(self):
-        text = watch.build_percent_message(stats(monthly=82.0), "monthly", 82.0, 80.0, self.cfg)
-        self.assertIn("🚨", text)
+        triggers = [watch.spend_trigger(1.0, 2.0, 2.0)]
+        text = watch.build_alert_message(stats(monthly=82.0), triggers, self.cfg)
+        self.assertIn("🔴", text)
+        crossed = {"kind": "percent", "window": "weekly", "percent": 52.0, "threshold": 50.0}
+        text = watch.build_alert_message(stats(monthly=10.0), [crossed], self.cfg)
+        self.assertIn("🟠", text)
+        self.assertEqual(watch.alert_severity(stats(monthly=10.0), [crossed]), 52.0)
         self.assertEqual(watch.percent_color(82.0), watch.COLOR_RED)
         self.assertEqual(watch.percent_color(60.0), watch.COLOR_AMBER)
         self.assertEqual(watch.percent_color(80.0), watch.COLOR_AMBER)
@@ -139,7 +166,7 @@ class ProviderPollTests(unittest.TestCase):
             detail="test",
         )
 
-    def test_baselines_then_alerts_on_dollars_and_percent(self):
+    def test_baselines_then_alerts_once_with_every_trigger(self):
         state = {}
         cfg = config(self.dir, providers=("openrouter",))
         self.snapshots = [self.snapshot(1.5)]
@@ -148,13 +175,14 @@ class ProviderPollTests(unittest.TestCase):
 
         self.snapshots = [self.snapshot(5.5)]
         self.assertTrue(watch.poll_providers(cfg, state))
-        self.assertEqual(len(self.sent), 2)
+        self.assertEqual(len(self.sent), 1)
         self.assertIn("OpenRouter spend", self.sent[0])
-        self.assertIn("usage at 55%", self.sent[1])
+        self.assertIn("crossed $1.00–$5.00", self.sent[0])
+        self.assertIn("Budget at 55% (crossed 50%)", self.sent[0])
 
         self.snapshots = [self.snapshot(5.5)]
         self.assertTrue(watch.poll_providers(cfg, state))
-        self.assertEqual(len(self.sent), 2)
+        self.assertEqual(len(self.sent), 1)
 
     def test_changing_the_step_rebaselines_a_provider(self):
         state = {}
@@ -169,6 +197,21 @@ class ProviderPollTests(unittest.TestCase):
         watch.poll_providers(cfg, state)
         self.assertEqual(len(self.sent), 1)
         self.assertEqual(state["providers"]["openrouter"]["step"], 5.0)
+
+    def test_provider_body_is_the_same_for_every_trigger(self):
+        cfg = config(self.dir, providers=("openrouter",))
+        spend = watch.build_provider_alert(
+            self.snapshot(5.5), [watch.spend_trigger(5.0, 5.5, 5.5)], cfg
+        )
+        percent = watch.build_provider_alert(
+            self.snapshot(5.5),
+            [{"kind": "percent", "percent": 55.0, "threshold": 50.0}],
+            cfg,
+        )
+        self.assertEqual(
+            spend.split(watch.notify.SECTION, 1)[1],
+            percent.split(watch.notify.SECTION, 1)[1],
+        )
 
     def test_provider_error_is_reported(self):
         state = {}
