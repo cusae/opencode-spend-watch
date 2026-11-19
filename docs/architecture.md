@@ -16,7 +16,9 @@ when the current billing period crosses another whole dollar.
 | `fetch_daily` | Read exact cost per UTC day. |
 | `fetch_models` | Read exact cost per model for the last 30 days. |
 | `collect` | Merge stored and fresh days, compute the period total, today, the last 7 days, and the closest limit. |
-| `build_message` | Render the alert Markdown and choose the severity colour and emoji. |
+| `render_message` | Single template for every message: header, event lines, then the event-independent body. |
+| `build_alert_message` | Render one message for every threshold crossed in a cycle, with the shared body, severity colour, and emoji. |
+| `percent_crossings` | Compare window percentages with the state and return the levels crossed since the last delivery. |
 | `notify.send_all` | Deliver to every enabled channel, isolating failures per backend. |
 | `notify` backends | Mattermost, Slack, Discord, IRC, email, WhatsApp, Telegram, and desktop payloads. |
 | `providers` | OpenRouter credits and OpenAI organization costs. |
@@ -145,9 +147,11 @@ may change; `check` and the cron log identify the failing path.
   colour and the status emoji share one severity calculation.
 - **Isolated backends.** One failing channel never blocks the others; the
   caller sees a result per channel.
-- **Independent alert families.** Dollar crossings, percentage windows, and
-  each extra provider keep their own checkpoint. A failure in one does not
-  suppress the others.
+- **Independent checkpoints, one message.** Dollar crossings, percentage
+  windows, and each extra provider keep their own checkpoint. Every threshold
+  crossed in the same poll is merged into one message per account, so the
+  channel receives a single notification. A failed delivery advances no
+  checkpoint and the next poll retries.
 - **Audit log.** Every delivery attempt is appended as JSON before the caller
   advances a checkpoint.
 - **One lock.** Cron, a manual poll, and `report` serialize on a file lock in

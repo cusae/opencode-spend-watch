@@ -18,6 +18,7 @@ This file is generated from Conventional Commits by `make changelog`.
 
 ### Changed
 
+- Merge every threshold crossed in one poll into a single message
 - Professionalize the docs, checks, and CI
 - Make the dollar threshold explicitly configurable
 

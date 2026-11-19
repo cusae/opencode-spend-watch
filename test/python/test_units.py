@@ -317,18 +317,29 @@ class FormatTests(unittest.TestCase):
         self.assertEqual(watch.format_moment(None), "unknown")
 
     def test_startup_message(self):
-        text = watch.build_message(self.stats(), None, None, self.config, "startup")
+        text = watch.build_message(self.stats(), self.config, "startup")
         self.assertIn("watcher started", text)
         self.assertIn("$6.05", text)
 
     def test_reset_message(self):
-        text = watch.build_message(self.stats(), None, None, self.config, "reset")
+        text = watch.build_message(self.stats(), self.config, "reset")
         self.assertIn("billing period reset", text.lower())
+
+    def test_every_message_shares_the_same_header_and_body(self):
+        stats = self.stats()
+        alert = watch.build_alert_message(stats, [watch.spend_trigger(5.0, 6.0, 6.05)], self.config)
+        body = alert.split(watch.notify.SECTION, 1)[1]
+        self.assertTrue(alert.startswith("🟢 **OpenCode usage — "))
+        for kind in ("startup", "reset", "report"):
+            text = watch.build_message(stats, self.config, kind)
+            header = text.splitlines()[0]
+            self.assertIn("**OpenCode usage — ", header)
+            self.assertEqual(text.split(watch.notify.SECTION, 1)[1], body)
 
     def test_report_notes_a_coverage_gap(self):
         stats = self.stats()
         stats["coverage_gap"] = True
-        text = watch.build_message(stats, None, None, self.config, "report")
+        text = watch.build_message(stats, self.config, "report")
         self.assertIn("current status", text)
         self.assertIn("30-day API window", text)
 

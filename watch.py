@@ -502,52 +502,14 @@ def message_emoji(stats: dict[str, Any], kind: str = "threshold") -> str:
     return "🟢"
 
 
-def build_message(
-    stats: dict[str, Any],
-    crossed_from: float | None,
-    crossed_to: float | None,
-    config: Config,
-    kind: str = "threshold",
-) -> str:
+def usage_blocks(stats: dict[str, Any], config: Config) -> str:
+    """Shared body for every message: windows, spend, models, and links."""
     windows = stats["windows"]
     monthly = windows.get("monthly") or {}
     weekly = windows.get("weekly") or {}
     rolling = windows.get("rolling") or {}
     monthly_used = monthly.get("percent")
     monthly_left = None if monthly_used is None else max(100.0 - monthly_used, 0.0)
-
-    if kind == "startup":
-        title = "**OpenCode spend watcher started**"
-        lead = (
-            f"Tracking from **{money(stats['period_total'])}** this billing period. "
-            f"Next alert at the next {money(config.step)}."
-        )
-    elif kind == "reset":
-        title = "**OpenCode billing period reset**"
-        lead = "Usage counters restart at zero. Threshold alerts are armed again."
-    elif kind == "report":
-        title = "**OpenCode spend — current status**"
-        lead = f"**{money(stats['period_total'])}** used this billing period."
-    else:
-        title = "**OpenCode spend — threshold reached**"
-        if (
-            crossed_from is not None
-            and crossed_to is not None
-            and crossed_to - crossed_from > config.step
-        ):
-            lead = (
-                f"**{money(stats['period_total'])}** used this period "
-                f"(crossed {money(crossed_from)}–{money(crossed_to)})."
-            )
-        elif crossed_to is not None:
-            lead = (
-                f"**{money(stats['period_total'])}** used this period "
-                f"(crossed {money(crossed_to)})."
-            )
-        else:
-            lead = f"**{money(stats['period_total'])}** used this period."
-
-    status = f"{message_emoji(stats, kind)} {title}\n{lead}"
 
     usage = "\n\n".join(
         [
@@ -598,7 +560,78 @@ def build_message(
     if config.console_url:
         context.append(f"🔗 [Open the console]({config.console_url})")
 
-    return notify.SECTION.join([status, usage, "\n\n".join(context)])
+    return notify.SECTION.join([usage, "\n\n".join(context)])
+
+
+def render_message(marker: str, title: str, lines: list[str], body: str) -> str:
+    """Single template: header, event lines, then the event-independent body."""
+    head = "\n".join([f"{marker} {title}", *lines])
+    return notify.SECTION.join(part for part in (head, body) if part)
+
+
+def build_message(stats: dict[str, Any], config: Config, kind: str = "report") -> str:
+    if kind == "startup":
+        title = "**OpenCode usage — watcher started**"
+        lines = [
+            f"Tracking from **{money(stats['period_total'])}** this billing period.",
+            f"Next alert at the next {money(config.step)}.",
+        ]
+    elif kind == "reset":
+        title = "**OpenCode usage — billing period reset**"
+        lines = ["Usage counters restart at zero. Threshold alerts are armed again."]
+    else:
+        title = "**OpenCode usage — current status**"
+        lines = [f"**{money(stats['period_total'])}** used this billing period."]
+    return render_message(message_emoji(stats, kind), title, lines, usage_blocks(stats, config))
+
+
+def window_label(window: str) -> str:
+    return {"rolling": "5-hour", "weekly": "Weekly", "monthly": "Monthly"}.get(window, window)
+
+
+def spend_trigger(crossed_from: float, crossed_to: float, total: float) -> dict[str, Any]:
+    return {"kind": "spend", "from": crossed_from, "to": crossed_to, "total": total}
+
+
+def trigger_line(trigger: dict[str, Any], config: Config) -> str:
+    if trigger["kind"] == "spend":
+        crossed = money(trigger["to"])
+        if float(trigger["to"]) - float(trigger["from"]) > config.step:
+            crossed = f"{money(trigger['from'])}–{money(trigger['to'])}"
+        return f"💵 **{money(trigger['total'])}** used this period (crossed {crossed})."
+    return (
+        f"🪟 {window_label(str(trigger['window']))} window at "
+        f"{float(trigger['percent']):.0f}% (crossed {float(trigger['threshold']):.0f}%)."
+    )
+
+
+def alert_title(triggers: list[dict[str, Any]]) -> str:
+    count = len(triggers)
+    if count == 1:
+        return "**OpenCode usage — threshold reached**"
+    return f"**OpenCode usage — {count} thresholds reached**"
+
+
+def alert_severity(stats: dict[str, Any], triggers: list[dict[str, Any]]) -> float:
+    """Highest severity: monthly window, closest model limit, or a crossed window."""
+    level = usage_severity(stats)
+    for trigger in triggers:
+        if trigger["kind"] == "percent":
+            level = max(level, float(trigger["percent"]))
+    return level
+
+
+def build_alert_message(
+    stats: dict[str, Any], triggers: list[dict[str, Any]], config: Config
+) -> str:
+    """One message for every threshold crossed during the same cycle."""
+    lines = [trigger_line(trigger, config) for trigger in triggers]
+    return render_message(
+        percent_marker(alert_severity(stats, triggers)),
+        alert_title(triggers),
+        lines,
+        usage_blocks(stats, config),
+    )
 
 
 # --------------------------------------------------------------------------- delivery
@@ -711,33 +744,50 @@ def percent_color(percent: float) -> str:
     return COLOR_GREEN
 
 
-def build_percent_message(
-    stats: dict[str, Any],
-    window: str,
-    percent: float,
-    threshold: float,
-    config: Config,
-) -> str:
-    label = {"rolling": "5-hour", "weekly": "weekly", "monthly": "monthly"}.get(window, window)
-    entry = stats["windows"].get(window) or {}
-    emoji = "🚨" if percent > 80 else "🟠" if percent >= 50 else "🟢"
-    status = (
-        f"{emoji} **OpenCode usage — {label} window at {percent:.0f}%**\n"
-        f"Crossed the {threshold:.0f}% threshold."
-    )
-    usage = (
-        f"**🪟 Window reset**\n{format_moment(entry.get('resets_at'))}\n\n"
-        f"{progress_bar(percent)} **{percent:.0f}% used**"
-    )
-    monthly = (stats["windows"].get("monthly") or {}).get("percent")
-    context = (
-        f"**💰 Spent this period** **{money(stats['period_total'])}**\n"
-        f"**📊 Monthly allowance** {progress_bar(monthly)} "
-        f"**{format_percent(monthly)} used**"
-    )
-    if config.console_url:
-        context += f"\n\n🔗 [Open the console]({config.console_url})"
-    return notify.SECTION.join([status, usage, context])
+def percent_crossings(
+    config: Config, stats: dict[str, Any], state: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Thresholds crossed by a window that were not already announced."""
+    entries = state.setdefault("percent_alerts", {})
+    crossings: list[dict[str, Any]] = []
+    for window in ("rolling", "weekly", "monthly"):
+        entry = stats["windows"].get(window) or {}
+        percent = entry.get("percent")
+        if percent is None:
+            continue
+        reset = entry.get("resets_at")
+        reset_iso = reset.isoformat() if reset else ""
+        current = entries.get(window) or {}
+        known = 0.0
+        if current.get("reset") == reset_iso:
+            known = float(current.get("threshold", 0.0))
+        crossed: float = max(
+            (value for value in config.percent_thresholds if percent >= value),
+            default=0.0,
+        )
+        if crossed <= known:
+            continue
+        crossings.append(
+            {
+                "kind": "percent",
+                "window": window,
+                "percent": percent,
+                "threshold": crossed,
+                "reset": reset_iso,
+            }
+        )
+    return crossings
+
+
+def apply_crossings(state: dict[str, Any], crossings: list[dict[str, Any]]) -> None:
+    entries = state.setdefault("percent_alerts", {})
+    for crossing in crossings:
+        if crossing["kind"] != "percent":
+            continue
+        entries[str(crossing["window"])] = {
+            "reset": crossing["reset"],
+            "threshold": crossing["threshold"],
+        }
 
 
 def baseline_percent(
@@ -757,56 +807,28 @@ def baseline_percent(
         }
 
 
-def process_percent_alerts(config: Config, stats: dict[str, Any], state: dict[str, Any]) -> bool:
-    entries = state.setdefault("percent_alerts", {})
-    delivered_all = True
-    for window in ("rolling", "weekly", "monthly"):
-        entry = stats["windows"].get(window) or {}
-        percent = entry.get("percent")
-        if percent is None:
-            continue
-        reset = entry.get("resets_at")
-        reset_iso = reset.isoformat() if reset else ""
-        current = entries.get(window)
-        if not current or current.get("reset") != reset_iso:
-            current = {"reset": reset_iso, "threshold": 0.0}
-            entries[window] = current
-        crossed = max(
-            (value for value in config.percent_thresholds if percent >= value),
-            default=0.0,
-        )
-        if crossed <= current.get("threshold", 0.0):
-            continue
-        text = build_percent_message(stats, window, percent, crossed, config)
-        results = deliver_and_log(config, "percent", text, percent_color(percent))
-        if delivery_ok(results):
-            current["threshold"] = crossed
-        else:
-            delivered_all = False
-    return delivered_all
-
-
 def provider_percent(snapshot: providers.Snapshot) -> float | None:
     if not snapshot.budget or snapshot.budget <= 0:
         return None
     return 100.0 * snapshot.spend / snapshot.budget
 
 
-def build_provider_message(
-    snapshot: providers.Snapshot,
-    crossed_from: float,
-    crossed_to: float,
-    config: Config,
+def provider_trigger_line(
+    snapshot: providers.Snapshot, trigger: dict[str, Any], config: Config
 ) -> str:
-    percent = provider_percent(snapshot)
-    emoji = message_emoji({"windows": {"monthly": {"percent": percent or 0}}})
-    if percent is None:
-        emoji = "🟢"
-    status = (
-        f"{emoji} **{snapshot.label} spend — threshold reached**\n"
-        f"**{money(snapshot.spend)}** used "
-        f"(crossed {money(crossed_from)}–{money(crossed_to)})."
+    if trigger["kind"] == "spend":
+        crossed = money(trigger["to"])
+        if float(trigger["to"]) - float(trigger["from"]) > config.step:
+            crossed = f"{money(trigger['from'])}–{money(trigger['to'])}"
+        return f"💵 **{money(snapshot.spend)}** used (crossed {crossed})."
+    return (
+        f"📊 Budget at {float(trigger['percent']):.0f}% "
+        f"(crossed {float(trigger['threshold']):.0f}%)."
     )
+
+
+def provider_blocks(snapshot: providers.Snapshot) -> str:
+    percent = provider_percent(snapshot)
     if snapshot.budget and percent is not None:
         usage = (
             f"**📊 Budget**\n{progress_bar(percent)} "
@@ -826,33 +848,23 @@ def build_provider_message(
         )
     if snapshot.detail:
         details.append(f"_{snapshot.detail}_")
-    parts = [status, usage, "\n\n".join(details)]
+    parts = [usage, "\n\n".join(details)]
     return notify.SECTION.join(part for part in parts if part)
 
 
-def build_provider_percent_message(
-    snapshot: providers.Snapshot,
-    percent: float,
-    threshold: float,
+def build_provider_alert(
+    snapshot: providers.Snapshot, triggers: list[dict[str, Any]], config: Config
 ) -> str:
-    emoji = "🚨" if percent > 80 else "🟠" if percent >= 50 else "🟢"
-    status = (
-        f"{emoji} **{snapshot.label} usage at {percent:.0f}%**\n"
-        f"Crossed the {threshold:.0f}% threshold."
-    )
-    usage = f"{progress_bar(percent)} **{percent:.0f}% used**\n"
-    usage += f"**💰 Spent** **{money(snapshot.spend)}**"
-    if snapshot.budget and snapshot.remaining is not None:
-        usage += (
-            f"\n**📊 Remaining** **{money(snapshot.remaining)}** of **{money(snapshot.budget)}**"
-        )
-    period = ""
-    if snapshot.period_start and snapshot.period_end:
-        period = (
-            f"**⏳ Billing period**\n{format_moment(snapshot.period_start)} → "
-            f"{format_moment(snapshot.period_end)}"
-        )
-    return notify.SECTION.join(part for part in (status, usage, period) if part)
+    """One message for every threshold a provider crossed in the same cycle."""
+    percent = provider_percent(snapshot)
+    marker = "🟢"
+    if percent is not None:
+        marker = message_emoji({"windows": {"monthly": {"percent": percent}}})
+    title = f"**{snapshot.label} spend — threshold reached**"
+    if len(triggers) > 1:
+        title = f"**{snapshot.label} spend — {len(triggers)} thresholds reached**"
+    lines = [provider_trigger_line(snapshot, trigger, config) for trigger in triggers]
+    return render_message(marker, title, lines, provider_blocks(snapshot))
 
 
 def poll_providers(config: Config, state: dict[str, Any]) -> bool:
@@ -886,30 +898,32 @@ def poll_providers(config: Config, state: dict[str, Any]) -> bool:
         entry["last_spend"] = snapshot.spend
 
         last_level = int(entry.get("last_level", 0))
+        triggers: list[dict[str, Any]] = []
         if level > last_level:
-            text = build_provider_message(
-                snapshot, last_level * config.step, level * config.step, config
+            triggers.append(
+                spend_trigger(last_level * config.step, level * config.step, snapshot.spend)
             )
-            color = percent_color(percent) if percent is not None else COLOR_GREEN
-            results = deliver_and_log(config, "provider", text, color)
-            if delivery_ok(results):
-                entry["last_level"] = level
-                log(f"{snapshot.label}: alert sent at {money(snapshot.spend)} (level {level})")
-            else:
-                ok = False
-
+        crossed = 0.0
         if percent is not None:
             crossed = max(
                 (value for value in config.percent_thresholds if percent >= value),
                 default=0.0,
             )
-            if crossed > entry.get("percent_threshold", 0.0):
-                text = build_provider_percent_message(snapshot, percent, crossed)
-                results = deliver_and_log(config, "provider-percent", text, percent_color(percent))
-                if delivery_ok(results):
-                    entry["percent_threshold"] = crossed
-                else:
-                    ok = False
+            if crossed > float(entry.get("percent_threshold", 0.0)):
+                triggers.append({"kind": "percent", "percent": percent, "threshold": crossed})
+        if not triggers:
+            continue
+        text = build_provider_alert(snapshot, triggers, config)
+        color = percent_color(percent) if percent is not None else COLOR_GREEN
+        results = deliver_and_log(config, "provider", text, color)
+        if not delivery_ok(results):
+            ok = False
+            continue
+        if level > last_level:
+            entry["last_level"] = level
+        if percent is not None and crossed > float(entry.get("percent_threshold", 0.0)):
+            entry["percent_threshold"] = crossed
+        log(f"{snapshot.label}: alert sent at {money(snapshot.spend)} (level {level})")
     return ok
 
 
@@ -934,7 +948,7 @@ def poll(config: Config) -> int:
                 results = deliver_and_log(
                     config,
                     "reset",
-                    build_message(stats, None, None, config, "reset"),
+                    build_message(stats, config, "reset"),
                     message_color(stats, "reset"),
                 )
                 if not delivery_ok(results):
@@ -953,7 +967,7 @@ def poll(config: Config) -> int:
                 results = deliver_and_log(
                     config,
                     "startup",
-                    build_message(stats, None, None, config, "startup"),
+                    build_message(stats, config, "startup"),
                     message_color(stats, "startup"),
                 )
                 if not delivery_ok(results):
@@ -983,24 +997,32 @@ def poll(config: Config) -> int:
         last_level = int(state.get("last_level", 0))
         state.update({"daily": merged, "period_end": period_end})
 
+        triggers: list[dict[str, Any]] = []
         if level > last_level:
-            crossed_from = last_level * config.step
-            crossed_to = level * config.step
-            text = build_message(stats, crossed_from, crossed_to, config)
-            results = deliver_and_log(config, "threshold", text, message_color(stats))
+            triggers.append(
+                spend_trigger(last_level * config.step, level * config.step, stats["period_total"])
+            )
+        triggers.extend(percent_crossings(config, stats, state))
+
+        if triggers:
+            text = build_alert_message(stats, triggers, config)
+            results = deliver_and_log(
+                config, "alert", text, percent_color(alert_severity(stats, triggers))
+            )
             if not delivery_ok(results):
                 store.save(state)
-                log("alert not delivered; level not advanced, will retry")
+                log("alert not delivered; checkpoints not advanced, will retry")
                 return 1
-            state["last_level"] = level
-            log(f"alert sent: {money(crossed_to)} ({money(stats['period_total'])})")
+            if level > last_level:
+                state["last_level"] = level
+            apply_crossings(state, triggers)
+            log(
+                f"alert sent: {money(stats['period_total'])} "
+                f"(level {level}, {len(triggers)} trigger(s))"
+            )
 
-        percent_ok = process_percent_alerts(config, stats, state)
         providers_ok = poll_providers(config, state)
         store.save(state)
-        if not percent_ok:
-            log("a percentage alert was not delivered; will retry on the next run")
-            return 1
         if not providers_ok:
             log("a provider check or alert failed; will retry on the next run")
             return 1
@@ -1018,7 +1040,7 @@ def report(config: Config) -> int:
             log(str(exc))
             return 1
 
-    print(build_message(stats, None, None, config, "report"))
+    print(build_message(stats, config, "report"))
     print()
     for item in stats["models"]:
         if item["cost"] > 0:

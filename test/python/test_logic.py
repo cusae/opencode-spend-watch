@@ -185,6 +185,48 @@ class PollTests(unittest.TestCase):
         self.assertEqual(len(self.sent), 1)
         self.assertEqual(self.state()["last_level"], 7)
 
+    def test_spend_and_percent_thresholds_send_one_message(self):
+        self.run_poll()
+        self.sent.clear()
+
+        def crossed(config, stored):
+            value = make_stats(55.31)
+            value["windows"]["weekly"]["percent"] = 52.0
+            return value
+
+        watch.collect = crossed
+        self.assertEqual(self.run_poll(), 0)
+        self.assertEqual(len(self.sent), 1)
+        self.assertIn("2 thresholds reached", self.sent[0])
+        self.assertIn("$55.31", self.sent[0])
+        self.assertIn("Weekly window at 52% (crossed 50%)", self.sent[0])
+        self.assertEqual(self.state()["last_level"], 55)
+        self.assertEqual(self.state()["percent_alerts"]["weekly"]["threshold"], 50.0)
+
+        self.assertEqual(self.run_poll(), 0)
+        self.assertEqual(len(self.sent), 1)
+
+    def test_failed_alert_keeps_every_checkpoint_pending(self):
+        self.run_poll()
+        self.sent.clear()
+
+        def crossed(config, stored):
+            value = make_stats(55.31)
+            value["windows"]["weekly"]["percent"] = 52.0
+            return value
+
+        watch.collect = crossed
+        self.post_ok = False
+        self.assertEqual(self.run_poll(), 1)
+        self.assertEqual(self.state()["last_level"], 5)
+        self.assertEqual(self.state()["percent_alerts"]["weekly"]["threshold"], 0.0)
+
+        self.post_ok = True
+        self.assertEqual(self.run_poll(), 0)
+        self.assertEqual(len(self.sent), 1)
+        self.assertEqual(self.state()["last_level"], 55)
+        self.assertEqual(self.state()["percent_alerts"]["weekly"]["threshold"], 50.0)
+
     def test_period_reset_rearms_thresholds(self):
         self.run_poll()
         self.sent.clear()
@@ -246,12 +288,12 @@ class MessageTests(unittest.TestCase):
     def test_fractional_step_is_printed_with_cents(self):
         config = make_config(Path("/tmp/unused"))
         config.step = 0.5
-        text = watch.build_message(make_stats(1.0), None, None, config, "startup")
+        text = watch.build_message(make_stats(1.0), config, "startup")
         self.assertIn("$0.50", text)
 
     def test_message_contains_dollars_and_remaining(self):
         config = make_config(Path("/tmp/unused"))
-        text = watch.build_message(make_stats(6.05), 5.0, 6.0, config)
+        text = watch.build_message(make_stats(6.05), config)
         self.assertIn("$6.05", text)
         self.assertIn("97% left", text)
         self.assertIn("2% used", text)

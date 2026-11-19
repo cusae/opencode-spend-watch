@@ -30,8 +30,9 @@ Standard library only. No database. No secret in the repository.
 
 - **Exact dollars.** Spend comes from the OpenCode Console, not from a local
   price table.
-- **One alert per dollar.** A delivery failure is retried; a threshold is never
-  skipped or duplicated.
+- **One message per cycle.** Every dollar and percentage threshold crossed in
+  the same poll arrives in one message. A delivery failure is retried; a
+  threshold is never skipped or duplicated.
 - **Durable history.** Daily costs survive after they leave the API's 30-day
   window, so every billing period stays complete.
 - **Full context.** Remaining allowance, window percentages and reset times,
@@ -44,7 +45,8 @@ Standard library only. No database. No secret in the repository.
   Telegram, desktop notifications, and an RSS 2.0 feed can be enabled
   together; one failing channel does not block the others.
 - **Percentage alerts.** 5-hour, weekly, and monthly windows alert at 50%,
-  80%, and 95% by default, independently of the dollar thresholds.
+  80%, and 95% by default. They share the dollar message when both cross in
+  the same poll.
 - **Alert log.** Every delivery attempt is appended to a JSONL file for audit
   and later inspection.
 - **More providers.** OpenRouter credits and OpenAI organization costs can be
@@ -103,7 +105,10 @@ percentage and the closest model limit.
 
 The billing period comes from the monthly `resetsAt` timestamp. Spend is the
 sum of daily costs from the period start. The threshold level is
-`floor(spend / step)`; a message is sent when that level increases.
+`floor(spend / step)`; a message is sent when that level increases. Every
+threshold crossed in one poll — a dollar level, one or more windows, or both —
+shares a single message. Only the header describes the event; the rest of the
+message is identical for every event.
 
 See [docs/architecture.md](docs/architecture.md) for the data flow, state
 schema, failure model, and API contract.
@@ -111,17 +116,18 @@ schema, failure model, and API contract.
 ### Message format
 
 ```text
-🟢 **OpenCode spend — threshold reached**
-**$6.05** used this period (crossed $6.00).
+🟠 **OpenCode usage — 2 thresholds reached**
+💵 **$55.31** used this period (crossed $55.00).
+🪟 Weekly window at 52% (crossed 50%).
 
 **⏳ Billing period**
 27 Oct 2026 14:09 UTC → 27 Nov 2026 14:09 UTC
 
 **📊 Monthly allowance**
-🟩⬜⬜⬜⬜⬜⬜⬜⬜⬜ **4% used** · **96% left**
+🟩🟩🟩⬜⬜⬜⬜⬜⬜⬜ **28% used** · **72% left**
 
 **🪟 Windows**
-5-hour 🟢 0% · weekly 🟡 6% · monthly 🟢 4%
+5-hour 🟢 4% · weekly 🟠 52% · monthly 🟢 28%
 
 **📅 Today** (UTC) **$1.63** · last 7 days **$3.70**
 **🤖 Top models** (30d) DeepSeek V4.1 Flash $3.86 · Claude Haiku 5.5 $0.69
