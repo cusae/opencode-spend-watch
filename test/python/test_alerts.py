@@ -79,6 +79,7 @@ class PercentAlertTests(unittest.TestCase):
         self.assertEqual([crossing["window"] for crossing in crossings], ["monthly"])
         text = watch.build_alert_message(stats(monthly=52.0), crossings, self.cfg)
         self.assertIn("Monthly window at 52% (crossed 50%)", text)
+        self.assertIn("Resets 27 Nov 2026 14:09 UTC.", text)
 
         watch.apply_crossings(state, crossings)
         self.assertEqual(watch.percent_crossings(self.cfg, stats(monthly=52.0), state), [])
@@ -96,6 +97,7 @@ class PercentAlertTests(unittest.TestCase):
         self.assertIn("$55.31", text)
         self.assertIn("crossed $55.00", text)
         self.assertIn("Weekly window at 52% (crossed 50%)", text)
+        self.assertIn("Resets 09 Nov 2026 00:00 UTC.", text)
         self.assertEqual(self.sent, [])
 
     def test_severity_colour_and_emoji(self):
@@ -183,6 +185,26 @@ class ProviderPollTests(unittest.TestCase):
         self.snapshots = [self.snapshot(5.5)]
         self.assertTrue(watch.poll_providers(cfg, state))
         self.assertEqual(len(self.sent), 1)
+
+    def test_budget_trigger_shows_when_the_period_resets(self):
+        state = {}
+        cfg = config(self.dir, providers=("openrouter",))
+        self.snapshots = [self.snapshot(1.5)]
+        watch.poll_providers(cfg, state)
+        self.snapshots = [
+            watch.providers.Snapshot(
+                name="openrouter",
+                label="OpenRouter",
+                spend=5.5,
+                budget=10.0,
+                remaining=4.5,
+                period_key="lifetime",
+                period_end=datetime(2026, 12, 1, tzinfo=timezone.utc),
+                detail="test",
+            )
+        ]
+        watch.poll_providers(cfg, state)
+        self.assertIn("Resets 01 Dec 2026 00:00 UTC.", self.sent[0])
 
     def test_changing_the_step_rebaselines_a_provider(self):
         state = {}

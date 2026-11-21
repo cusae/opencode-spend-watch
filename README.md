@@ -45,8 +45,8 @@ Standard library only. No database. No secret in the repository.
   Telegram, desktop notifications, and an RSS 2.0 feed can be enabled
   together; one failing channel does not block the others.
 - **Percentage alerts.** 5-hour, weekly, and monthly windows alert at 50%,
-  80%, and 95% by default. They share the dollar message when both cross in
-  the same poll.
+  80%, and 95% by default. Each alert states when that window resets. They
+  share the dollar message when both cross in the same poll.
 - **Alert log.** Every delivery attempt is appended to a JSONL file for audit
   and later inspection.
 - **More providers.** OpenRouter credits and OpenAI organization costs can be
