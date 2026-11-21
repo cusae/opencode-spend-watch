@@ -593,6 +593,19 @@ def spend_trigger(crossed_from: float, crossed_to: float, total: float) -> dict[
     return {"kind": "spend", "from": crossed_from, "to": crossed_to, "total": total}
 
 
+def reset_moment(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    return parse_iso(value)
+
+
+def reset_suffix(value: object) -> str:
+    moment = reset_moment(value)
+    if moment is None:
+        return ""
+    return f" Resets {format_moment(moment)}."
+
+
 def trigger_line(trigger: dict[str, Any], config: Config) -> str:
     if trigger["kind"] == "spend":
         crossed = money(trigger["to"])
@@ -602,6 +615,7 @@ def trigger_line(trigger: dict[str, Any], config: Config) -> str:
     return (
         f"🪟 {window_label(str(trigger['window']))} window at "
         f"{float(trigger['percent']):.0f}% (crossed {float(trigger['threshold']):.0f}%)."
+        f"{reset_suffix(trigger.get('reset'))}"
     )
 
 
@@ -824,6 +838,7 @@ def provider_trigger_line(
     return (
         f"📊 Budget at {float(trigger['percent']):.0f}% "
         f"(crossed {float(trigger['threshold']):.0f}%)."
+        f"{reset_suffix(snapshot.period_end)}"
     )
 
 
