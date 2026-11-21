@@ -225,6 +225,18 @@ Signed-off-by: Name <email>
 merge it once the checks are green. Direct pushes are rejected, and force
 pushes are disabled.
 
+### Delivery loop
+
+For this repository, always run the whole loop without asking again:
+
+1. Commit with `-s -S` and the required trailers.
+2. Push the branch to `origin`.
+3. Open a pull request with `gh`.
+4. Wait for every check, then squash-merge and delete the branch.
+
+Merge only when every check is green. If a check fails, fix it on the same
+branch and push again; do not merge a red pull request.
+
 ### Commit messages
 
 - Subject line in the imperative mood, no trailing period. Use a
